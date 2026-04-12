@@ -5,15 +5,15 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v4.0';
+const APP_VERSION = 'v4.1';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
 const SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmjcAZ6v2j5Lrs_XhyPovwduIdtVjfnQKr0bqOau-MSyW3nuePnfoHsFAU4-OJWxilBqxCL3DKe2AA/pub?gid=0&single=true&output=csv';
 
-// GitHub Gist — receives work order exports from MMR Setup
-const GITHUB_TOKEN = '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';
-const GITHUB_GIST_ID = '194f7564434858abccd2d8ede7969129';
+// GitHub Gist — receives work order exports from MMR Setup (public gist, no token needed)
+const GITHUB_TOKEN = '';
+const GITHUB_GIST_ID = 'aa005d9b6708553fc37317c35900aefb';
 
 // ── Engineer PINs ─────────────────────────────
 // Key: engineer name exactly as it appears in Google Sheets
@@ -222,28 +222,36 @@ function parseCSV(text) {
 
 // ── GitHub Gist fetch ──────────────────────────
 async function fetchFromGist() {
-  try {
-    const res = await fetch(`https://api.github.com/gists/${GITHUB_GIST_ID}`, {
-      cache: 'no-store',
-      headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}` },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const content = data.files?.['workorders.json']?.content;
-    if (!content) return null;
-    const records = JSON.parse(content);
-    if (Array.isArray(records) && records.length && records[0]['Street Address'] !== undefined) {
-      return records;
-    }
-  } catch (_) { }
+  const headers = { 'Authorization': `Bearer ${GITHUB_TOKEN}` };
+  // Also try without auth in case token has been revoked (public gist fallback)
+  for (const reqHeaders of [headers, {}]) {
+    try {
+      const res = await fetch(`https://api.github.com/gists/${GITHUB_GIST_ID}`, {
+        cache: 'no-store',
+        headers: reqHeaders,
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const content = data.files?.['workorders.json']?.content;
+      if (!content) continue;
+      const records = JSON.parse(content);
+      if (Array.isArray(records) && records.length && records[0]['Street Address'] !== undefined) {
+        return records;
+      }
+    } catch (_) { }
+  }
   return null;
 }
 
 // ── Google Sheets CSV fetch ────────────────────
+// Routed through a CORS proxy so the browser never navigates directly to
+// docs.google.com — this prevents mobile Android from intercepting the
+// request via App Links and opening the Google Sheets app.
 async function fetchCSVFromSheets() {
   if (!SHEETS_CSV_URL || SHEETS_CSV_URL.startsWith('PASTE_')) return null;
+  const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(SHEETS_CSV_URL)}`;
   try {
-    const res = await fetch(SHEETS_CSV_URL, { cache: 'no-store' });
+    const res = await fetch(proxyUrl, { cache: 'no-store' });
     if (!res.ok) return null;
     return await res.text();
   } catch (_) {
