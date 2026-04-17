@@ -5,7 +5,7 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v4.1';
+const APP_VERSION = 'v4.2';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
@@ -67,6 +67,7 @@ let activeGroupIndex = 0;
 let sheetJustOpened = false;    // guard: prevents same tap from immediately closing the sheet
 let dueTodayActive = false;
 let dateFilter = 'all';  // 'all' | 'today' | 'tomorrow'
+let locationFilter = 'all';  // 'all' | 'inside' | 'outside'
 let showLabels = true;
 let selectedEngineer = '';
 let pendingRecords = null;
@@ -117,7 +118,9 @@ const geocodeFixClose = document.getElementById('geocode-fix-close');
 const engineerFilterSel = document.getElementById('engineer-filter');
 const btnDueToday = document.getElementById('btn-due-today');
 const btnDateFilter = document.getElementById('btn-date-filter');
-const btnRefresh = document.getElementById('btn-refresh');
+const btnLocationFilter = document.getElementById('btn-location-filter');
+const btnRefresh = null; // button removed
+const btnGarminExport = document.getElementById('btn-garmin-export');
 const btnLabels = document.getElementById('btn-labels');
 const btnAddAddress = document.getElementById('btn-add-address');
 const addAddressModal = document.getElementById('add-address-modal');
@@ -1021,6 +1024,12 @@ function getFilteredPoints() {
     if (dueTodayActive && !isDueToday(p.row)) return false;
     if (dateFilter === 'today' && !isTargetOnDate(p.row, todayISO())) return false;
     if (dateFilter === 'tomorrow' && !isTargetOnDate(p.row, tomorrowISO())) return false;
+    if (locationFilter !== 'all') {
+      const loc = (p.row['Meter Location'] || '').trim().toUpperCase();
+      const isOutside = ['AB', 'AR', 'AL', 'AF', 'AO', 'AG', 'AT'].includes(loc);
+      if (locationFilter === 'outside' && !isOutside) return false;
+      if (locationFilter === 'inside' && isOutside) return false;
+    }
     return true;
   });
 }
@@ -1161,12 +1170,12 @@ function tryRestoreSession() {
 
 // ── Event listeners ───────────────────────────
 async function reloadFromSheets() {
-  btnRefresh.classList.add('is-loading');
+  if (btnRefresh) btnRefresh.classList.add('is-loading');
 
   // Try JSONBin first (MMR Setup exports land here)
   const gistRecords = await fetchFromGist();
   if (gistRecords && gistRecords.length) {
-    btnRefresh.classList.remove('is-loading');
+    if (btnRefresh) btnRefresh.classList.remove('is-loading');
     showToast('Work orders reloaded');
     applyNewCSV(gistRecords, false);
     return;
@@ -1187,7 +1196,7 @@ async function reloadFromSheets() {
 }
 
 btnLoadNew.addEventListener('click', reloadFromSheets);
-btnRefresh.addEventListener('click', reloadFromSheets);
+if (btnRefresh) btnRefresh.addEventListener('click', reloadFromSheets);
 
 detailClose.addEventListener('click', closeDetailSheet);
 
@@ -1252,6 +1261,70 @@ addAddressInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') btnAddAddrSubmit.click();
 });
 
+function optimiseRoute(points) {
+  if (points.length <= 2) return points.slice();
+
+  // Squared lat/lng distance — fast enough for nearest-neighbour within a city
+  function dist2(a, b) {
+    const dlat = a.lat - b.lat;
+    const dlng = a.lng - b.lng;
+    return dlat * dlat + dlng * dlng;
+  }
+
+  // Start from the GPS location if available, otherwise first point
+  let startLat, startLng;
+  if (userLocationMarker) {
+    const ll = userLocationMarker.getLatLng();
+    startLat = ll.lat; startLng = ll.lng;
+  } else {
+    startLat = points[0].lat; startLng = points[0].lng;
+  }
+
+  const unvisited = points.slice();
+  const route = [];
+  let cur = { lat: startLat, lng: startLng };
+
+  while (unvisited.length) {
+    let bestIdx = 0, bestD = Infinity;
+    for (let i = 0; i < unvisited.length; i++) {
+      const d = dist2(cur, unvisited[i]);
+      if (d < bestD) { bestD = d; bestIdx = i; }
+    }
+    cur = unvisited.splice(bestIdx, 1)[0];
+    route.push(cur);
+  }
+
+  return route;
+}
+
+btnGarminExport.addEventListener('click', () => {
+  const points = getFilteredPoints();
+  if (!points.length) {
+    showToast('No work orders to export', true);
+    return;
+  }
+  const ordered = optimiseRoute(points);
+  const wpts = ordered.map(({ lat, lng, row }) => {
+    const addr = stripCityFromAddr((row['Street Address'] || '').trim(), (row['City'] || '').trim());
+    const wo = (row['Workorder'] || '').trim();
+    const name = addr || wo || 'Work Order';
+    const desc = wo ? `WO# ${wo}` : 'Added Address';
+    return `  <wpt lat="${lat}" lon="${lng}">\n    <name>${esc(name)}</name>\n    <desc>${esc(desc)}</desc>\n  </wpt>`;
+  }).join('\n');
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="WorkOrderMap" xmlns="http://www.topografix.com/GPX/1/1">\n${wpts}\n</gpx>`;
+  const date = new Date().toLocaleDateString('en-CA');
+  const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `workorders-${date}.gpx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`${ordered.length} waypoint${ordered.length !== 1 ? 's' : ''} exported (optimised)`);
+});
+
 btnLabels.addEventListener('click', () => {
   showLabels = !showLabels;
   btnLabels.classList.toggle('active', showLabels);
@@ -1294,6 +1367,27 @@ btnDateFilter.addEventListener('click', () => {
     dateFilter = 'all';
     btnDateFilter.textContent = 'All Dates';
     btnDateFilter.classList.remove('active', 'tomorrow');
+  }
+  placeMarkers(getFilteredPoints(), false);
+  updateBadge();
+  updateStatusBar();
+});
+
+btnLocationFilter.addEventListener('click', () => {
+  if (locationFilter === 'all') {
+    locationFilter = 'inside';
+    btnLocationFilter.textContent = 'Inside';
+    btnLocationFilter.classList.add('active-inside');
+    btnLocationFilter.classList.remove('active-outside');
+  } else if (locationFilter === 'inside') {
+    locationFilter = 'outside';
+    btnLocationFilter.textContent = 'Outside';
+    btnLocationFilter.classList.remove('active-inside');
+    btnLocationFilter.classList.add('active-outside');
+  } else {
+    locationFilter = 'all';
+    btnLocationFilter.textContent = 'All Locations';
+    btnLocationFilter.classList.remove('active-inside', 'active-outside');
   }
   placeMarkers(getFilteredPoints(), false);
   updateBadge();

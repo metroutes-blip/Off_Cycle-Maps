@@ -823,6 +823,28 @@ html, body {
   opacity: 0.55;
 }
 
+/* ─── Garmin export button (fixed bottom-left) ─ */
+.btn-garmin-fixed {
+  position: fixed;
+  bottom: 150px;
+  left: 16px;
+  z-index: 600;
+  background: rgba(30, 40, 60, 0.25);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.12);
+  color: #fff;
+  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* ─── Label toggle button (fixed bottom-left) ── */
 .btn-labels-fixed {
   position: fixed;
@@ -923,6 +945,19 @@ html, body {
   border-color: rgba(139, 92, 246, 0.5);
 }
 
+
+/* ─── Location filter button (Inside / Outside / All) ── */
+.location-filter-btn { font-size: 0.72rem; font-weight: 700; min-width: 90px; }
+.location-filter-btn.active-inside {
+  background: rgba(22, 163, 74, 0.75);
+  border-color: rgba(22, 163, 74, 0.5);
+  color: #fff;
+}
+.location-filter-btn.active-outside {
+  background: rgba(234, 88, 12, 0.75);
+  border-color: rgba(234, 88, 12, 0.5);
+  color: #fff;
+}
 
 /* ─── Complete button ────────────────────────── */
 .complete-btn {
