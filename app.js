@@ -5,7 +5,7 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v4.2';
+const APP_VERSION = 'v4.3';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
@@ -119,10 +119,21 @@ const engineerFilterSel = document.getElementById('engineer-filter');
 const btnDueToday = document.getElementById('btn-due-today');
 const btnDateFilter = document.getElementById('btn-date-filter');
 const btnLocationFilter = document.getElementById('btn-location-filter');
+const dateFilterValue = document.getElementById('date-filter-value');
+const locationFilterValue = document.getElementById('location-filter-value');
 const btnRefresh = null; // button removed
 const btnGarminExport = document.getElementById('btn-garmin-export');
 const btnLabels = document.getElementById('btn-labels');
 const btnAddAddress = document.getElementById('btn-add-address');
+const btnBurger = document.getElementById('btn-burger');
+const burgerMenu = document.getElementById('burger-menu');
+const btnLocate = document.getElementById('btn-locate');
+const btnDeleteCompleted = document.getElementById('btn-delete-completed');
+const completedCountBadge = document.getElementById('completed-count-badge');
+const deleteConfirmModal = document.getElementById('delete-confirm-modal');
+const deleteConfirmDesc = document.getElementById('delete-confirm-desc');
+const btnDeleteConfirm = document.getElementById('btn-delete-confirm');
+const btnDeleteCancel = document.getElementById('btn-delete-cancel');
 const addAddressModal = document.getElementById('add-address-modal');
 const addAddressInput = document.getElementById('add-address-input');
 const addAddressStatus = document.getElementById('add-address-status');
@@ -669,21 +680,6 @@ function initLeafletMap() {
   applyTileTheme(mapStyle);
   darkMQ.addEventListener('change', () => { if (mapStyle === 'auto') applyTileTheme('auto'); });
 
-  // GPS locate button
-  const LocateControl = L.Control.extend({
-    options: { position: 'topright' },
-    onAdd() {
-      const btn = L.DomUtil.create('button', 'locate-btn leaflet-bar');
-      btn.title = 'Show my location';
-      btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="7" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg>`;
-      L.DomEvent.on(btn, 'click', startLocating);
-      return btn;
-    },
-  });
-  new LocateControl().addTo(leafletMap);
-
   leafletMap.on('locationfound', onLocationFound);
   leafletMap.on('locationerror', () => showToast('Could not get your location', true));
   leafletMap.on('move', resetGpsTimer);
@@ -1039,6 +1035,16 @@ function updateBadge() {
   woCountBadge.textContent = `${n} job${n !== 1 ? 's' : ''}`;
 }
 
+function updateCompletedCountBadge() {
+  const n = Object.keys(completions).length;
+  if (n > 0) {
+    completedCountBadge.textContent = n;
+    completedCountBadge.classList.remove('hidden');
+  } else {
+    completedCountBadge.classList.add('hidden');
+  }
+}
+
 function updateStatusBar() {
   const pts = getFilteredPoints();
   const total = pts.length;
@@ -1200,8 +1206,13 @@ if (btnRefresh) btnRefresh.addEventListener('click', reloadFromSheets);
 
 detailClose.addEventListener('click', closeDetailSheet);
 
-// Tap outside detail sheet to close
+// Tap outside detail sheet to close; also close burger menu
 viewMap.addEventListener('click', (e) => {
+  if (!burgerMenu.classList.contains('hidden') &&
+    !burgerMenu.contains(e.target) &&
+    e.target !== btnBurger && !btnBurger.contains(e.target)) {
+    closeBurgerMenu();
+  }
   if (sheetJustOpened) return;
   if (!detailSheet.classList.contains('hidden') && !detailSheet.contains(e.target)) {
     closeDetailSheet();
@@ -1322,6 +1333,7 @@ btnGarminExport.addEventListener('click', () => {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  closeBurgerMenu();
   showToast(`${ordered.length} waypoint${ordered.length !== 1 ? 's' : ''} exported (optimised)`);
 });
 
@@ -1356,16 +1368,16 @@ btnDueToday.addEventListener('click', () => {
 btnDateFilter.addEventListener('click', () => {
   if (dateFilter === 'all') {
     dateFilter = 'today';
-    btnDateFilter.textContent = 'Today';
+    dateFilterValue.textContent = 'Today';
     btnDateFilter.classList.add('active');
     btnDateFilter.classList.remove('tomorrow');
   } else if (dateFilter === 'today') {
     dateFilter = 'tomorrow';
-    btnDateFilter.textContent = 'Tomorrow';
+    dateFilterValue.textContent = 'Tomorrow';
     btnDateFilter.classList.add('active', 'tomorrow');
   } else {
     dateFilter = 'all';
-    btnDateFilter.textContent = 'All Dates';
+    dateFilterValue.textContent = 'All Dates';
     btnDateFilter.classList.remove('active', 'tomorrow');
   }
   placeMarkers(getFilteredPoints(), false);
@@ -1376,29 +1388,22 @@ btnDateFilter.addEventListener('click', () => {
 btnLocationFilter.addEventListener('click', () => {
   if (locationFilter === 'all') {
     locationFilter = 'inside';
-    btnLocationFilter.textContent = 'Inside';
+    locationFilterValue.textContent = 'Inside';
     btnLocationFilter.classList.add('active-inside');
     btnLocationFilter.classList.remove('active-outside');
   } else if (locationFilter === 'inside') {
     locationFilter = 'outside';
-    btnLocationFilter.textContent = 'Outside';
+    locationFilterValue.textContent = 'Outside';
     btnLocationFilter.classList.remove('active-inside');
     btnLocationFilter.classList.add('active-outside');
   } else {
     locationFilter = 'all';
-    btnLocationFilter.textContent = 'All Locations';
+    locationFilterValue.textContent = 'All Locations';
     btnLocationFilter.classList.remove('active-inside', 'active-outside');
   }
   placeMarkers(getFilteredPoints(), false);
   updateBadge();
   updateStatusBar();
-});
-
-btnMapStyle.addEventListener('click', e => {
-  e.stopPropagation();
-  mapStyleMenu.querySelectorAll('[data-style]').forEach(i =>
-    i.classList.toggle('active', i.dataset.style === mapStyle));
-  mapStyleMenu.classList.toggle('hidden');
 });
 
 mapStyleMenu.querySelectorAll('[data-style]').forEach(item => {
@@ -1407,11 +1412,19 @@ mapStyleMenu.querySelectorAll('[data-style]').forEach(item => {
     const style = item.dataset.style;
     applyTileTheme(style);
     localStorage.setItem(MAP_STYLE_KEY, style);
-    mapStyleMenu.classList.add('hidden');
+    mapStyleMenu.querySelectorAll('[data-style]').forEach(i =>
+      i.classList.toggle('active', i.dataset.style === mapStyle));
+    closeBurgerMenu();
   });
 });
 
-document.addEventListener('click', () => mapStyleMenu.classList.add('hidden'));
+document.addEventListener('click', e => {
+  if (!burgerMenu.classList.contains('hidden') &&
+    !burgerMenu.contains(e.target) &&
+    e.target !== btnBurger && !btnBurger.contains(e.target)) {
+    closeBurgerMenu();
+  }
+});
 
 btnMergeKeep.addEventListener('click', () => {
   mergeModal.classList.add('hidden');
@@ -1428,6 +1441,64 @@ btnMergeFresh.addEventListener('click', () => {
 btnFixAddresses.addEventListener('click', showGeocodeFix);
 geocodeFixClose.addEventListener('click', () => geocodeFixModal.classList.add('hidden'));
 overdueDismiss.addEventListener('click', () => overdueWarning.classList.add('hidden'));
+
+// ── Burger menu ───────────────────────────────
+function openBurgerMenu() {
+  mapStyleMenu.querySelectorAll('[data-style]').forEach(i =>
+    i.classList.toggle('active', i.dataset.style === mapStyle));
+  burgerMenu.classList.remove('hidden');
+}
+
+function closeBurgerMenu() {
+  burgerMenu.classList.add('hidden');
+}
+
+btnBurger.addEventListener('click', e => {
+  e.stopPropagation();
+  burgerMenu.classList.contains('hidden') ? openBurgerMenu() : closeBurgerMenu();
+});
+
+btnLocate.addEventListener('click', () => {
+  closeBurgerMenu();
+  startLocating();
+});
+
+btnDeleteCompleted.addEventListener('click', () => {
+  const n = Object.keys(completions).length;
+  if (!n) {
+    showToast('No completed work orders to delete', true);
+    closeBurgerMenu();
+    return;
+  }
+  deleteConfirmDesc.textContent = `Permanently remove ${n} completed work order${n !== 1 ? 's' : ''} from the map?`;
+  closeBurgerMenu();
+  deleteConfirmModal.classList.remove('hidden');
+});
+
+btnDeleteCancel.addEventListener('click', () => deleteConfirmModal.classList.add('hidden'));
+
+btnDeleteConfirm.addEventListener('click', () => {
+  const completedIds = new Set(Object.keys(completions));
+  const n = completedIds.size;
+
+  geocodedPoints = geocodedPoints.filter(p => !completedIds.has((p.row['Workorder'] || '').trim()));
+  workOrders = workOrders.filter(r => !completedIds.has((r['Workorder'] || '').trim()));
+  completions = {};
+  saveCompletions();
+  try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
+  savePoints();
+
+  if (activeRow && completedIds.has((activeRow['Workorder'] || '').trim())) {
+    closeDetailSheet();
+  }
+
+  placeMarkers(getFilteredPoints(), false);
+  updateBadge();
+  updateStatusBar();
+  updateCompletedCountBadge();
+  deleteConfirmModal.classList.add('hidden');
+  showToast(`${n} work order${n !== 1 ? 's' : ''} deleted`);
+});
 
 detailNavLink.addEventListener('click', (e) => {
   if (activeRow && isRedLock(activeRow) && isLockEndPast(activeRow)) {
@@ -1464,6 +1535,7 @@ btnComplete.addEventListener('click', () => {
     showToast('Work order completed');
   }
   updateStatusBar();
+  updateCompletedCountBadge();
 });
 
 // ── PIN lock helpers ──────────────────────────
@@ -1570,6 +1642,7 @@ function bootContinue() {
 function boot() {
   completions = loadCompletions();
   purgeOldCompletions();   // remove work orders completed before today
+  updateCompletedCountBadge();
 
   // Hide splash after letter animation sequence completes (~4.3s)
   setTimeout(() => {

@@ -823,54 +823,6 @@ html, body {
   opacity: 0.55;
 }
 
-/* ─── Garmin export button (fixed bottom-left) ─ */
-.btn-garmin-fixed {
-  position: fixed;
-  bottom: 150px;
-  left: 16px;
-  z-index: 600;
-  background: rgba(30, 40, 60, 0.25);
-  backdrop-filter: blur(14px) saturate(160%);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.12);
-  color: #fff;
-  border-radius: 10px;
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* ─── Label toggle button (fixed bottom-left) ── */
-.btn-labels-fixed {
-  position: fixed;
-  bottom: 98px;
-  left: 16px;
-  z-index: 600;
-  background: rgba(30, 40, 60, 0.25);
-  backdrop-filter: blur(14px) saturate(160%);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.12);
-  color: #fff;
-  border-radius: 10px;
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.btn-labels-fixed.active {
-  background: rgba(59, 130, 246, 0.65);
-  border-color: rgba(59, 130, 246, 0.5);
-}
-
 /* ─── Load CSV button (fixed bottom-left) ───── */
 .btn-load-new-fixed {
   position: fixed;
@@ -893,71 +845,181 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ─── Map style picker menu ──────────────────── */
-.map-style-wrap {
-  position: relative;
-}
-
-.map-style-menu {
+/* ─── Burger menu ────────────────────────────── */
+.burger-menu {
   position: absolute;
-  bottom: calc(100% + 8px);
-  right: 0;
-  background: rgba(20, 28, 48, 0.92);
-  backdrop-filter: blur(16px) saturate(160%);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 12px;
+  top: 58px;
+  right: 12px;
+  z-index: 550;
+  background: rgba(18, 24, 40, 0.96);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 16px;
   overflow: hidden;
-  min-width: 152px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
-  z-index: 600;
+  min-width: 272px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
 }
 
-.map-style-item {
-  padding: 11px 16px;
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.85);
+.burger-section-label {
+  padding: 10px 16px 5px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.burger-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.88);
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-.map-style-item:last-child { border-bottom: none; }
-.map-style-item:hover      { background: rgba(255, 255, 255, 0.1); }
-.map-style-item.active     { color: #f59e0b; font-weight: 700; }
-
-/* ─── Due Today toggle ───────────────────────── */
-.due-today-btn { font-size: 0.72rem; font-weight: 700; min-width: 68px; }
-.due-today-btn.active {
-  background: rgba(245, 158, 11, 0.75);
-  border-color: rgba(245, 158, 11, 0.5);
-  color: #fff;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
 }
 
-/* ─── Date filter button (Today / Tomorrow / All Dates) ── */
-.date-filter-btn { font-size: 0.72rem; font-weight: 700; min-width: 78px; }
-.date-filter-btn.active {
-  background: rgba(59, 130, 246, 0.75);
-  border-color: rgba(59, 130, 246, 0.5);
-  color: #fff;
-}
-.date-filter-btn.active.tomorrow {
-  background: rgba(139, 92, 246, 0.75);
-  border-color: rgba(139, 92, 246, 0.5);
+.burger-row:last-child { border-bottom: none; }
+
+.burger-row:active { background: rgba(255, 255, 255, 0.07); }
+
+.burger-row svg { flex-shrink: 0; opacity: 0.72; }
+
+.burger-row-label {
+  flex: 1;
+  font-size: 0.88rem;
+  font-weight: 500;
 }
 
+.burger-row-value {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+  flex-shrink: 0;
+}
 
-/* ─── Location filter button (Inside / Outside / All) ── */
-.location-filter-btn { font-size: 0.72rem; font-weight: 700; min-width: 90px; }
-.location-filter-btn.active-inside {
-  background: rgba(22, 163, 74, 0.75);
-  border-color: rgba(22, 163, 74, 0.5);
+/* Active states for filter value colours */
+#btn-date-filter.active       .burger-row-value { color: #60a5fa; }
+#btn-date-filter.active.tomorrow .burger-row-value { color: #a78bfa; }
+#btn-location-filter.active-inside  .burger-row-value { color: #4ade80; }
+#btn-location-filter.active-outside .burger-row-value { color: #fb923c; }
+
+/* Toggle pill */
+.burger-toggle-pill {
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.18);
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.burger-toggle-pill::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+
+.burger-row.active .burger-toggle-pill {
+  background: #3b82f6;
+}
+
+.burger-row.active .burger-toggle-pill::after {
+  transform: translateX(16px);
+}
+
+#btn-due-today.active .burger-toggle-pill {
+  background: #f59e0b;
+}
+
+/* Map style row */
+.burger-style-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.burger-style-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.burger-style-header svg { opacity: 0.72; }
+
+.burger-style-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-left: 30px;
+}
+
+.map-style-chip {
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+
+.map-style-chip:active { background: rgba(255, 255, 255, 0.2); }
+.map-style-chip.active {
+  background: rgba(59, 130, 246, 0.65);
+  color: #fff;
+  border-color: rgba(59, 130, 246, 0.45);
+}
+
+/* Danger row (delete completed) */
+.burger-row-danger {
+  color: #f87171;
+}
+.burger-row-danger svg { opacity: 0.85; }
+.burger-row-danger:active { background: rgba(239, 68, 68, 0.1); }
+
+.completed-count-badge {
+  background: rgba(239, 68, 68, 0.55);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+/* Danger modal action button */
+.modal-action-danger {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  background: #dc2626;
   color: #fff;
 }
-.location-filter-btn.active-outside {
-  background: rgba(234, 88, 12, 0.75);
-  border-color: rgba(234, 88, 12, 0.5);
-  color: #fff;
-}
+.modal-action-danger:active { opacity: 0.85; }
 
 /* ─── Complete button ────────────────────────── */
 .complete-btn {
