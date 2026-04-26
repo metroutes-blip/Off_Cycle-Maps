@@ -5,7 +5,7 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v4.3';
+const APP_VERSION = 'v4.4';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
@@ -157,6 +157,11 @@ const mergeModal = document.getElementById('merge-modal');
 const mergeModalDesc = document.getElementById('merge-modal-desc');
 const btnMergeKeep = document.getElementById('btn-merge-keep');
 const btnMergeFresh = document.getElementById('btn-merge-fresh');
+const listViewPanel = document.getElementById('list-view-panel');
+const listViewBody = document.getElementById('list-view-body');
+const listViewCount = document.getElementById('list-view-count');
+const btnListClose = document.getElementById('btn-list-close');
+const btnListView = document.getElementById('btn-list-view');
 
 // ── Helpers ───────────────────────────────────
 function fmtDate(str) {
@@ -1057,6 +1062,7 @@ function updateStatusBar() {
 
 // ── Load CSV and kick off geocoding ───────────
 function applyNewCSV(records, keepPrev) {
+  closeListView();
   let finalRecords = records;
 
   if (keepPrev && workOrders.length && selectedEngineer) {
@@ -1453,10 +1459,115 @@ function closeBurgerMenu() {
   burgerMenu.classList.add('hidden');
 }
 
+// ── List view ─────────────────────────────────
+function openListView() {
+  closeBurgerMenu();
+  detailSheet.classList.add('hidden');
+  detailSheet.classList.remove('open');
+  activeRow = null;
+  buildListView();
+  listViewPanel.classList.remove('hidden');
+}
+
+function closeListView() {
+  listViewPanel.classList.add('hidden');
+}
+
+function buildListView() {
+  const pts = getFilteredPoints();
+
+  function urgency(row) {
+    if (isRedLock(row) && isLockEndPast(row)) return 0;
+    if (isDueToday(row)) return 1;
+    return 2;
+  }
+
+  const incomplete = pts
+    .filter(p => !completions[(p.row['Workorder'] || '').trim()])
+    .sort((a, b) => {
+      const ud = urgency(a.row) - urgency(b.row);
+      if (ud) return ud;
+      return (a.row['Street Address'] || '').localeCompare(b.row['Street Address'] || '');
+    });
+
+  const done = pts
+    .filter(p => completions[(p.row['Workorder'] || '').trim()])
+    .sort((a, b) => (a.row['Street Address'] || '').localeCompare(b.row['Street Address'] || ''));
+
+  listViewCount.textContent = `${pts.length} job${pts.length !== 1 ? 's' : ''}`;
+  listViewBody.innerHTML = '';
+
+  function makeItem(pt, isDone) {
+    const { lat, lng, row } = pt;
+    const addr = stripCityFromAddr((row['Street Address'] || '').trim(), (row['City'] || '').trim());
+    const city = (row['City'] || '').trim();
+    const wo = (row['Workorder'] || '').trim();
+    const code = (row['Notification Code'] || '').trim();
+    const type = (row['Notification Type'] || '').trim();
+    const color = isDone ? '#d1d5db' : getMarkerColor(row);
+    const isOverdue = !isDone && isRedLock(row) && isLockEndPast(row);
+
+    const metaParts = [];
+    if (wo) metaParts.push(`WO# ${wo}`);
+    if (code) metaParts.push(code);
+    if (city) metaParts.push(city);
+
+    const item = document.createElement('div');
+    item.className = `list-item${isDone ? ' list-item-done' : ''}`;
+    item.innerHTML = `
+      <div class="list-item-dot" style="background:${esc(color)}"></div>
+      <div class="list-item-body">
+        <div class="list-item-address">${esc(addr || wo || '—')}${isOverdue ? '<span class="list-item-overdue">OVERDUE</span>' : ''}</div>
+        <div class="list-item-meta">${esc(metaParts.join(' · '))}</div>
+      </div>
+      <div class="list-item-right">
+        <span class="notif-chip ${chipClass(type)}">${esc(type || '—')}</span>
+        ${isDone ? '<svg class="list-item-done-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+      </div>`;
+
+    item.addEventListener('click', () => {
+      closeListView();
+      activeGroup = geocodedPoints.filter(p => p.lat === lat && p.lng === lng);
+      activeGroupIndex = activeGroup.findIndex(p => p.row === row);
+      if (activeGroupIndex < 0) activeGroupIndex = 0;
+      if (leafletMap) leafletMap.setView([lat, lng], Math.max(leafletMap.getZoom(), 16));
+      openDetailSheet(row, lat, lng);
+    });
+
+    return item;
+  }
+
+  if (incomplete.length) {
+    const hdr = document.createElement('div');
+    hdr.className = 'list-section-header';
+    hdr.textContent = `Pending (${incomplete.length})`;
+    listViewBody.appendChild(hdr);
+    incomplete.forEach(pt => listViewBody.appendChild(makeItem(pt, false)));
+  }
+
+  if (done.length) {
+    const hdr = document.createElement('div');
+    hdr.className = 'list-section-header';
+    hdr.textContent = `Completed (${done.length})`;
+    listViewBody.appendChild(hdr);
+    done.forEach(pt => listViewBody.appendChild(makeItem(pt, true)));
+  }
+
+  if (!pts.length) {
+    const empty = document.createElement('div');
+    empty.className = 'list-view-empty';
+    empty.textContent = 'No work orders match the current filters.';
+    listViewBody.appendChild(empty);
+  }
+}
+
 btnBurger.addEventListener('click', e => {
   e.stopPropagation();
   burgerMenu.classList.contains('hidden') ? openBurgerMenu() : closeBurgerMenu();
 });
+
+btnListView.addEventListener('click', openListView);
+btnListClose.addEventListener('click', closeListView);
 
 btnLocate.addEventListener('click', () => {
   closeBurgerMenu();
