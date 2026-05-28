@@ -586,6 +586,39 @@ html, body {
   margin-top: 2px;
 }
 
+/* "Fix location" inline button under address */
+.fix-location-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-light);
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
+  transition: color 0.15s;
+}
+.fix-location-btn:hover { color: var(--accent); }
+.fix-location-btn svg { flex-shrink: 0; }
+
+/* Original address label inside fix-location modal */
+.fix-location-address-label {
+  font-size: 0.8rem;
+  color: var(--text-medium);
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-style: italic;
+  margin-bottom: 4px;
+}
+
 .detail-note {
   font-style: italic;
   color: var(--text-medium);
@@ -606,8 +639,9 @@ html, body {
   padding-top: 16px;
   padding-bottom: 8px;
   display: flex;
+  flex-direction: column;
   gap: 10px;
-  justify-content: center;
+  align-items: center;
 }
 
 .navigate-btn {
@@ -626,6 +660,49 @@ html, body {
 }
 
 .navigate-btn:active { background: #163d7e; }
+
+/* ─── Navigation options (Google, Apple, Waze) ── */
+.nav-options {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+}
+
+.nav-option-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 16px;
+  color: #fff;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  flex: 1;
+  max-width: 140px;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.15s;
+}
+
+.nav-option-btn:active { opacity: 0.78; }
+
+.nav-google {
+  background: #4285F4;
+  box-shadow: 0 3px 10px rgba(66, 133, 244, 0.35);
+}
+
+.nav-apple {
+  background: #1a1a1a;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+.nav-waze {
+  background: #05C8F7;
+  color: #0a1a2a;
+  box-shadow: 0 3px 10px rgba(5, 200, 247, 0.3);
+}
 
 /* ─── Modal ──────────────────────────────────── */
 .modal-overlay {

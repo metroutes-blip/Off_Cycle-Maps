@@ -297,6 +297,14 @@
         <div id="detail-address" class="detail-value detail-address-val"></div>
         <div id="detail-mis" class="detail-mis hidden"></div>
         <div id="detail-city" class="detail-value"></div>
+        <button id="btn-fix-location" class="fix-location-btn" title="Marker in wrong place? Fix it">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+            <circle cx="12" cy="10" r="3"/>
+          </svg>
+          Fix location
+        </button>
       </div>
 
       <!-- Location note -->
@@ -349,19 +357,44 @@
 
       <!-- Navigate + Complete buttons -->
       <div class="detail-section detail-nav-row">
-        <a id="detail-nav-link" class="navigate-btn" href="#" target="_blank" rel="noopener">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-               fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-          </svg>
-          Navigate
-        </a>
+        <div class="nav-options">
+          <a id="nav-google" class="nav-option-btn nav-google" href="#" target="_blank" rel="noopener" title="Google Maps">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+            </svg>
+            Google
+          </a>
+          <a id="nav-apple" class="nav-option-btn nav-apple" href="#" target="_blank" rel="noopener" title="Apple Maps">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+              <circle cx="12" cy="10" r="3"/>
+            </svg>
+            Apple
+          </a>
+          <a id="nav-waze" class="nav-option-btn nav-waze" href="#" target="_blank" rel="noopener" title="Waze">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
+            </svg>
+            Waze
+          </a>
+        </div>
         <button id="btn-complete" class="complete-btn">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12"/>
           </svg>
           Complete
+        </button>
+        <button id="btn-delete-notice" class="complete-btn" style="background:#ef4444; color:white; border-color:#dc2626; display:none; margin-top:10px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          Delete Notice
         </button>
       </div>
 
@@ -387,6 +420,22 @@
       <p class="modal-desc">These addresses could not be located. Edit the query and retry.</p>
       <div id="geocode-fix-list" class="geocode-fix-list"></div>
       <button id="geocode-fix-close" class="modal-cancel">Done</button>
+    </div>
+  </div>
+
+  <!-- ── Fix location modal ───────────────────── -->
+  <div id="fix-location-modal" class="modal-overlay hidden">
+    <div class="modal-sheet">
+      <h2 class="modal-title">Fix Location</h2>
+      <p class="modal-desc">The pin landed in the wrong spot. Edit the search query below and tap Relocate to move it to the correct position.</p>
+      <div class="fix-location-address-label" id="fix-location-original"></div>
+      <input id="fix-location-input" type="text" class="add-address-input"
+             placeholder="e.g. 123 Main St, Ottawa, Ontario" autocomplete="off" />
+      <div id="fix-location-status" class="add-address-status hidden"></div>
+      <div class="modal-actions">
+        <button id="btn-fix-location-submit" class="modal-action-primary">Relocate Pin</button>
+        <button id="btn-fix-location-cancel" class="modal-action-secondary">Cancel</button>
+      </div>
     </div>
   </div>
 

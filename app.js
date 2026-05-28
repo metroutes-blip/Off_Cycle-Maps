@@ -5,7 +5,7 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v4.4';
+const APP_VERSION = 'v4.5';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
@@ -111,7 +111,9 @@ const detailLastRead = document.getElementById('detail-last-read');
 const detailRefErt = document.getElementById('detail-ref-ert');
 const detailDatesRow = document.getElementById('detail-dates-row');
 const detailDates = document.getElementById('detail-dates');
-const detailNavLink = document.getElementById('detail-nav-link');
+const navGoogle = document.getElementById('nav-google');
+const navApple = document.getElementById('nav-apple');
+const navWaze = document.getElementById('nav-waze');
 const geocodeFixModal = document.getElementById('geocode-fix-modal');
 const geocodeFixList = document.getElementById('geocode-fix-list');
 const geocodeFixClose = document.getElementById('geocode-fix-close');
@@ -139,12 +141,20 @@ const addAddressInput = document.getElementById('add-address-input');
 const addAddressStatus = document.getElementById('add-address-status');
 const btnAddAddrSubmit = document.getElementById('btn-add-address-submit');
 const btnAddAddrCancel = document.getElementById('btn-add-address-cancel');
+const fixLocationModal = document.getElementById('fix-location-modal');
+const fixLocationInput = document.getElementById('fix-location-input');
+const fixLocationStatus = document.getElementById('fix-location-status');
+const fixLocationOriginal = document.getElementById('fix-location-original');
+const btnFixLocation = document.getElementById('btn-fix-location');
+const btnFixLocationSubmit = document.getElementById('btn-fix-location-submit');
+const btnFixLocationCancel = document.getElementById('btn-fix-location-cancel');
 const detailGroupNav = document.getElementById('detail-group-nav');
 const detailGroupLabel = document.getElementById('detail-group-label');
 const btnDetailPrev = document.getElementById('detail-prev');
 const btnDetailNext = document.getElementById('detail-next');
 const toast = document.getElementById('toast');
 const btnComplete = document.getElementById('btn-complete');
+const btnDeleteNotice = document.getElementById('btn-delete-notice');
 const overdueWarning = document.getElementById('detail-overdue-warning');
 const overdueText = document.getElementById('detail-overdue-text');
 const overdueDismiss = document.getElementById('detail-overdue-dismiss');
@@ -466,11 +476,16 @@ function getMarkerColor(row) {
   return '#3b82f6';                           // default blue
 }
 
+function postItBg(color) {
+  return `<path d="M3 3 h20 v14 l-6 6 h-14 z" fill="${color}" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="23 17, 17 17, 17 23" fill="rgba(0,0,0,0.15)"/>`;
+}
+
 function makeCircleIcon(color) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
-    <circle cx="11" cy="11" r="9" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
+    ${postItBg(color)}
   </svg>`;
-  return L.divIcon({ html: svg, className: '', iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -14] });
+  return L.divIcon({ html: svg, className: '', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -14] });
 }
 
 // RDLK must be done Mon–Thu; if targetfinish is Fri/Sat/Sun, shift back to that Thursday
@@ -553,7 +568,7 @@ function makeLockIcon(bgColor, keyColor, badge = null) {
       <text x="21" y="7.8" text-anchor="middle" font-size="6" font-weight="bold" fill="#dc2626">!</text>`;
   }
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    <circle cx="13" cy="13" r="11" fill="${bgColor}" stroke="#fff" stroke-width="2.5"/>
+    ${postItBg(bgColor)}
     <rect x="9" y="12" width="8" height="6" rx="1.2" fill="#fff"/>
     <path d="M10.5 12v-2a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
     <circle cx="13" cy="15" r="1" fill="${keyColor}"/>
@@ -563,9 +578,9 @@ function makeLockIcon(bgColor, keyColor, badge = null) {
 }
 
 function makeOpenLockIcon() {
-  // Dark grey circle with an open padlock (shackle raised on right side)
+  // Dark grey post-it with an open padlock (shackle raised on right side)
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    <circle cx="13" cy="13" r="11" fill="#4b5563" stroke="#fff" stroke-width="2.5"/>
+    ${postItBg('#4b5563')}
     <rect x="9" y="13" width="8" height="6" rx="1.2" fill="#fff"/>
     <path d="M10.5 13v-3a2.5 2.5 0 0 1 5 0" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
     <circle cx="13" cy="16" r="1" fill="#4b5563"/>
@@ -575,7 +590,7 @@ function makeOpenLockIcon() {
 
 function makeBatteryIcon() {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    <circle cx="13" cy="13" r="11" fill="#f97316" stroke="#fff" stroke-width="2.5"/>
+    ${postItBg('#f97316')}
     <rect x="7" y="10.5" width="10" height="5.5" rx="1.2" fill="none" stroke="#fff" stroke-width="1.5"/>
     <rect x="17" y="12" width="2" height="2.5" rx="0.5" fill="#fff"/>
     <line x1="9.5" y1="13.25" x2="11.5" y2="13.25" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
@@ -584,9 +599,9 @@ function makeBatteryIcon() {
 }
 
 function makeTamperIcon() {
-  // Turquoise circle: closed lock body with a "!" exclamation — tamper alert
+  // Turquoise post-it: closed lock body with a "!" exclamation — tamper alert
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    <circle cx="13" cy="13" r="11" fill="#0d9488" stroke="#fff" stroke-width="2.5"/>
+    ${postItBg('#0d9488')}
     <rect x="9.5" y="12.5" width="7" height="5.5" rx="1.2" fill="#fff"/>
     <path d="M11 12.5v-1.8a2 2 0 0 1 4 0v1.8" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
     <line x1="13" y1="14.2" x2="13" y2="16" stroke="#0d9488" stroke-width="1.4" stroke-linecap="round"/>
@@ -596,9 +611,9 @@ function makeTamperIcon() {
 }
 
 function makeMoveIcon() {
-  // Blue circle with a bold right-pointing arrow — represents relocation/move
+  // Blue post-it with a bold right-pointing arrow — represents relocation/move
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    <circle cx="13" cy="13" r="11" fill="#3b82f6" stroke="#fff" stroke-width="2.5"/>
+    ${postItBg('#3b82f6')}
     <line x1="7" y1="13" x2="17" y2="13" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
     <polyline points="13,9 17,13 13,17" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
@@ -606,9 +621,9 @@ function makeMoveIcon() {
 }
 
 function makeSpecialReadIcon() {
-  // Yellow circle with a checkmark — special/check read
+  // Yellow post-it with a checkmark — special/check read
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    <circle cx="13" cy="13" r="11" fill="#eab308" stroke="#fff" stroke-width="2.5"/>
+    ${postItBg('#eab308')}
     <polyline points="7.5,13.5 11,17 18.5,9" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
   return L.divIcon({ html: svg, className: '', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -16] });
@@ -748,10 +763,14 @@ function placeMarkers(points, zoomToFit = true) {
   points.forEach(({ lat, lng, row }) => {
     const icon = makeMarkerIcon(row);
     const addr = (row['Street Address'] || '').trim();
-    const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+    const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+    const appleUrl = `https://maps.apple.com/?daddr=${lat},${lng}`;
+    const wazeUrl = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
 
     const popup = `<strong>${esc(addr)}</strong>
-      <br><a href="${mapsUrl}" target="_blank" rel="noopener" class="popup-nav-link">↪ Navigate</a>`;
+      <br><a href="${googleUrl}" target="_blank" rel="noopener" class="popup-nav-link">Google</a>
+      · <a href="${appleUrl}" target="_blank" rel="noopener" class="popup-nav-link">Apple</a>
+      · <a href="${wazeUrl}" target="_blank" rel="noopener" class="popup-nav-link">Waze</a>`;
 
     const marker = L.marker([lat, lng], { icon })
       .addTo(leafletMap)
@@ -788,9 +807,13 @@ function placeMarkers(points, zoomToFit = true) {
 function addSingleMarker(coords, row) {
   const icon = makeMarkerIcon(row);
   const addr = (row['Street Address'] || '').trim();
-  const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`;
+  const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`;
+  const appleUrl = `https://maps.apple.com/?daddr=${coords.lat},${coords.lng}`;
+  const wazeUrl = `https://waze.com/ul?ll=${coords.lat},${coords.lng}&navigate=yes`;
   const popup = `<strong>${esc(addr)}</strong>
-    <br><a href="${mapsUrl}" target="_blank" rel="noopener" class="popup-nav-link">↪ Navigate</a>`;
+    <br><a href="${googleUrl}" target="_blank" rel="noopener" class="popup-nav-link">Google</a>
+    · <a href="${appleUrl}" target="_blank" rel="noopener" class="popup-nav-link">Apple</a>
+    · <a href="${wazeUrl}" target="_blank" rel="noopener" class="popup-nav-link">Waze</a>`;
 
   const marker = L.marker([coords.lat, coords.lng], { icon })
     .addTo(leafletMap)
@@ -889,7 +912,9 @@ function openDetailSheet(row, lat, lng) {
     detailDatesRow.classList.add('hidden');
   }
 
-  detailNavLink.href = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  navGoogle.href = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  navApple.href = `https://maps.apple.com/?daddr=${lat},${lng}`;
+  navWaze.href = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
 
   // Set complete button state
   const wo = (row['Workorder'] || '').trim();
@@ -910,8 +935,16 @@ function openDetailSheet(row, lat, lng) {
     detailNotifChip.className = 'notif-chip chip-default';
     detailWoNum.textContent = 'Added Address';
     btnComplete.classList.add('hidden');
+    btnFixLocation.classList.add('hidden');
+    btnDeleteNotice.style.display = 'none';
   } else {
     btnComplete.classList.remove('hidden');
+    btnFixLocation.classList.remove('hidden');
+    if (wo.startsWith('TN-') && completions[wo]) {
+      btnDeleteNotice.style.display = 'flex';
+    } else {
+      btnDeleteNotice.style.display = 'none';
+    }
   }
 
   if (isRedLock(row) && isLockEndPast(row)) {
@@ -1278,6 +1311,97 @@ addAddressInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') btnAddAddrSubmit.click();
 });
 
+// ── Fix location modal ────────────────────────
+function showFixLocationModal() {
+  if (!activeRow) return;
+  const addr = (activeRow['Street Address'] || '').trim();
+  const city = (activeRow['City'] || '').trim();
+  const cleanAddr = cleanAddressForGeocode(addr, activeRow['Mis Address'] || '');
+  const query = city ? `${cleanAddr}, ${city}, Ontario` : `${cleanAddr}, Ontario`;
+
+  fixLocationOriginal.textContent = `Original: ${addr}${city ? ', ' + city : ''}`;
+  fixLocationInput.value = query;
+  fixLocationStatus.classList.add('hidden');
+  fixLocationStatus.textContent = '';
+  btnFixLocationSubmit.disabled = false;
+  btnFixLocationSubmit.textContent = 'Relocate Pin';
+  fixLocationModal.classList.remove('hidden');
+  setTimeout(() => fixLocationInput.select(), 80);
+}
+
+async function handleFixLocationSubmit() {
+  const q = fixLocationInput.value.trim();
+  if (!q || !activeRow) return;
+
+  btnFixLocationSubmit.disabled = true;
+  btnFixLocationSubmit.textContent = 'Searching…';
+  fixLocationStatus.classList.add('hidden');
+
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=ca`,
+      { headers: { 'User-Agent': 'WorkOrderMapPWA/1.0' } }
+    );
+    const data = await res.json();
+
+    if (!data || !data[0]) {
+      fixLocationStatus.textContent = 'Address not found — try a more specific query';
+      fixLocationStatus.style.color = '#dc2626';
+      fixLocationStatus.classList.remove('hidden');
+      btnFixLocationSubmit.disabled = false;
+      btnFixLocationSubmit.textContent = 'Relocate Pin';
+      return;
+    }
+
+    const newLat = parseFloat(data[0].lat);
+    const newLng = parseFloat(data[0].lon);
+
+    // Update geocache so future loads use the corrected position
+    const cache = loadGeoCache();
+    const streetAddress = (activeRow['Street Address'] || '').trim();
+    const misAddress = (activeRow['Mis Address'] || '').trim();
+    const city = (activeRow['City'] || '').trim();
+    const cacheKey = `${cleanAddressForGeocode(streetAddress, misAddress)},${city}`.toLowerCase();
+    cache[cacheKey] = { lat: newLat, lng: newLng };
+    saveGeoCache(cache);
+
+    // Move the point in geocodedPoints
+    const pt = geocodedPoints.find(p => p.row === activeRow);
+    if (pt) {
+      pt.lat = newLat;
+      pt.lng = newLng;
+    } else {
+      geocodedPoints.push({ lat: newLat, lng: newLng, row: activeRow });
+    }
+    savePoints();
+
+    // Redraw markers and pan to new position
+    placeMarkers(getFilteredPoints(), false);
+    if (leafletMap) leafletMap.setView([newLat, newLng], Math.max(leafletMap.getZoom(), 16));
+
+    fixLocationModal.classList.add('hidden');
+    showToast('Pin relocated successfully');
+
+    // Re-open the detail sheet at the corrected location
+    activeGroup = geocodedPoints.filter(p => p.lat === newLat && p.lng === newLng);
+    activeGroupIndex = activeGroup.findIndex(p => p.row === activeRow);
+    if (activeGroupIndex < 0) activeGroupIndex = 0;
+    openDetailSheet(activeRow, newLat, newLng);
+
+  } catch (_) {
+    fixLocationStatus.textContent = 'Network error — try again';
+    fixLocationStatus.style.color = '#dc2626';
+    fixLocationStatus.classList.remove('hidden');
+    btnFixLocationSubmit.disabled = false;
+    btnFixLocationSubmit.textContent = 'Relocate Pin';
+  }
+}
+
+btnFixLocation.addEventListener('click', showFixLocationModal);
+btnFixLocationSubmit.addEventListener('click', handleFixLocationSubmit);
+btnFixLocationCancel.addEventListener('click', () => fixLocationModal.classList.add('hidden'));
+fixLocationInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleFixLocationSubmit(); });
+
 function optimiseRoute(points) {
   if (points.length <= 2) return points.slice();
 
@@ -1611,14 +1735,17 @@ btnDeleteConfirm.addEventListener('click', () => {
   showToast(`${n} work order${n !== 1 ? 's' : ''} deleted`);
 });
 
-detailNavLink.addEventListener('click', (e) => {
+function onNavClick(e) {
   if (activeRow && isRedLock(activeRow) && isLockEndPast(activeRow)) {
     e.preventDefault();
     const tf = (activeRow['targetfinish'] || '').trim();
     overdueText.textContent = `⚠ Lock end date has passed (${tf})`;
     overdueWarning.classList.remove('hidden');
   }
-});
+}
+navGoogle.addEventListener('click', onNavClick);
+navApple.addEventListener('click', onNavClick);
+navWaze.addEventListener('click', onNavClick);
 
 btnComplete.addEventListener('click', () => {
   if (!activeRow) return;
@@ -1634,6 +1761,7 @@ btnComplete.addEventListener('click', () => {
     btnComplete.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
       fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="20 6 9 17 4 12"/></svg> Complete`;
+    if (wo.startsWith('TN-')) btnDeleteNotice.style.display = 'none';
   } else {
     // Mark complete
     completions[wo] = { date: new Date().toLocaleString('en-CA') };
@@ -1644,9 +1772,31 @@ btnComplete.addEventListener('click', () => {
       fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="20 6 9 17 4 12"/></svg> Completed`;
     showToast('Work order completed');
+    if (wo.startsWith('TN-')) btnDeleteNotice.style.display = 'flex';
   }
   updateStatusBar();
   updateCompletedCountBadge();
+});
+
+btnDeleteNotice.addEventListener('click', () => {
+  if (!activeRow) return;
+  const wo = (activeRow['Workorder'] || '').trim();
+  if (!wo.startsWith('TN-')) return;
+  
+  if (confirm('Permanently delete this Tenant Notice?')) {
+    geocodedPoints = geocodedPoints.filter(p => (p.row['Workorder'] || '').trim() !== wo);
+    workOrders = workOrders.filter(r => (r['Workorder'] || '').trim() !== wo);
+    delete completions[wo];
+    try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
+    savePoints();
+    saveCompletions();
+    closeDetailSheet();
+    placeMarkers(getFilteredPoints(), false);
+    updateBadge();
+    updateStatusBar();
+    updateCompletedCountBadge();
+    showToast('Tenant Notice deleted');
+  }
 });
 
 // ── PIN lock helpers ──────────────────────────
