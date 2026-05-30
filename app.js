@@ -5,14 +5,14 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v4.5';
+const APP_VERSION = 'v4.6';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
 const SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmjcAZ6v2j5Lrs_XhyPovwduIdtVjfnQKr0bqOau-MSyW3nuePnfoHsFAU4-OJWxilBqxCL3DKe2AA/pub?gid=0&single=true&output=csv';
 
 // GitHub Gist — receives work order exports from MMR Setup (public gist, no token needed)
-const GITHUB_TOKEN = '';
+const GITHUB_TOKEN = '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';
 const GITHUB_GIST_ID = 'aa005d9b6708553fc37317c35900aefb';
 
 // ── Engineer PINs ─────────────────────────────
@@ -40,6 +40,10 @@ const ENGINEER_PINS = {
   'GRANDMAK': '0760',
 };
 const PIN_UNLOCK_PREFIX = 'wo_pin_'; // localStorage: wo_pin_<engineer> = 'YYYY-MM-DD'
+
+// ── ID prefixes ───────────────────────────────
+const CUSTOM_ID_PREFIX = 'CUSTOM-';
+const NEW_WO_ID_PREFIX = 'NWO-';
 
 // ── Storage keys ──────────────────────────────
 const RECORDS_KEY = 'wo_records';
@@ -154,7 +158,7 @@ const btnDetailPrev = document.getElementById('detail-prev');
 const btnDetailNext = document.getElementById('detail-next');
 const toast = document.getElementById('toast');
 const btnComplete = document.getElementById('btn-complete');
-const btnDeleteNotice = document.getElementById('btn-delete-notice');
+const btnDeleteWO = document.getElementById('btn-delete-wo');
 const overdueWarning = document.getElementById('detail-overdue-warning');
 const overdueText = document.getElementById('detail-overdue-text');
 const overdueDismiss = document.getElementById('detail-overdue-dismiss');
@@ -172,6 +176,20 @@ const listViewBody = document.getElementById('list-view-body');
 const listViewCount = document.getElementById('list-view-count');
 const btnListClose = document.getElementById('btn-list-close');
 const btnListView = document.getElementById('btn-list-view');
+const newWoModal = document.getElementById('new-wo-modal');
+const newWoStatus = document.getElementById('new-wo-status');
+const btnNewWo = document.getElementById('btn-new-wo');
+const btnNewWoSubmit = document.getElementById('btn-new-wo-submit');
+const btnNewWoCancel = document.getElementById('btn-new-wo-cancel');
+const nwoWorkorder = document.getElementById('nwo-workorder');
+const nwoAddress = document.getElementById('nwo-address');
+const nwoCity = document.getElementById('nwo-city');
+const nwoNotifType = document.getElementById('nwo-notif-type');
+const nwoNotifCode = document.getElementById('nwo-notif-code');
+const nwoMeterNum = document.getElementById('nwo-meter-num');
+const nwoMeterSize = document.getElementById('nwo-meter-size');
+const nwoMeterLoc = document.getElementById('nwo-meter-loc');
+const nwoLocNote = document.getElementById('nwo-loc-note');
 
 // ── Helpers ───────────────────────────────────
 function fmtDate(str) {
@@ -270,6 +288,39 @@ async function fetchFromGist() {
     } catch (_) { }
   }
   return null;
+}
+
+// ── GitHub Gist write-back ──────────────────────
+async function updateGist(records) {
+  if (!GITHUB_TOKEN || !GITHUB_GIST_ID) {
+    showToast('Gist not configured — change not saved to cloud', true);
+    return false;
+  }
+  try {
+    const res = await fetch(`https://api.github.com/gists/${GITHUB_GIST_ID}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${GITHUB_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        files: {
+          'workorders.json': { content: JSON.stringify(records, null, 2) },
+        },
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error('Gist update failed:', res.status, err);
+      showToast('Failed to sync to cloud — check token permissions', true);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error('Gist update error:', e);
+    showToast('Network error — could not sync to cloud', true);
+    return false;
+  }
 }
 
 // ── Google Sheets CSV fetch ────────────────────
@@ -419,7 +470,7 @@ function geocodeAllRecords(progressCb) {
     misAddress: (row['Mis Address'] || '').trim(),
     city: (row['City'] || '').trim(),
   })).filter(t => t.streetAddress &&
-    (!selectedEngineer || (t.row['engineer'] || '').trim() === selectedEngineer));
+    (!selectedEngineer || t.row['_isCustom'] || (t.row['engineer'] || '').trim() === selectedEngineer));
 
   const results = [], failures = [];
   let done = 0;
@@ -459,7 +510,7 @@ function geocodeAllRecords(progressCb) {
 const NOTIF_CODE = (row) => (row['Notification Code'] || '').trim().toUpperCase();
 
 function isRedLock(row) { return NOTIF_CODE(row) === 'RDLK'; }
-function isBlackLock(row) { return ['LKFS', 'TLOC', 'LOCK'].includes(NOTIF_CODE(row)); }
+function isBlackLock(row) { return ['LKFS', 'TLOC', 'LOCK', 'LKSN'].includes(NOTIF_CODE(row)); }
 function isOpenLock(row) { return NOTIF_CODE(row) === 'LKOO'; }
 function isBattery(row) { return NOTIF_CODE(row) === 'RMBE'; }
 function isTamper(row) { return NOTIF_CODE(row) === 'TC01'; }
@@ -936,15 +987,13 @@ function openDetailSheet(row, lat, lng) {
     detailWoNum.textContent = 'Added Address';
     btnComplete.classList.add('hidden');
     btnFixLocation.classList.add('hidden');
-    btnDeleteNotice.style.display = 'none';
+    btnDeleteWO.style.display = 'flex';
+    btnDeleteWO.querySelector('span') && (btnDeleteWO.querySelector('span').textContent = 'Delete Address');
   } else {
     btnComplete.classList.remove('hidden');
     btnFixLocation.classList.remove('hidden');
-    if (wo.startsWith('TN-') && completions[wo]) {
-      btnDeleteNotice.style.display = 'flex';
-    } else {
-      btnDeleteNotice.style.display = 'none';
-    }
+    btnDeleteWO.style.display = 'flex';
+    btnDeleteWO.querySelector('span') && (btnDeleteWO.querySelector('span').textContent = 'Delete Work Order');
   }
 
   if (isRedLock(row) && isLockEndPast(row)) {
@@ -1054,7 +1103,8 @@ function buildEngineerFilter() {
 function getFilteredPoints() {
   const eng = engineerFilterSel.value;
   return geocodedPoints.filter(p => {
-    if (eng && (p.row['engineer'] || '').trim() !== eng) return false;
+    if (eng && !p.row['_isCustom'] && (p.row['engineer'] || '').trim() !== eng) return false;
+
     if (dueTodayActive && !isDueToday(p.row)) return false;
     if (dateFilter === 'today' && !isTargetOnDate(p.row, todayISO())) return false;
     if (dateFilter === 'tomorrow' && !isTargetOnDate(p.row, tomorrowISO())) return false;
@@ -1289,12 +1339,29 @@ btnAddAddrSubmit.addEventListener('click', async () => {
     const data = await res.json();
     if (data && data[0]) {
       const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-      const row = { 'Street Address': q, _isCustom: true };
+      // Generate a unique ID for this custom address so it can be deleted later
+      const customId = CUSTOM_ID_PREFIX + Date.now();
+      const row = {
+        'Street Address': q,
+        'Workorder': customId,
+        '_lat': String(coords.lat),
+        '_lng': String(coords.lng),
+        '_isCustom': true,
+      };
+      // Add to in-memory state and map
       geocodedPoints.push({ lat: coords.lat, lng: coords.lng, row });
+      workOrders.push(row);
+      savePoints();
+      try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
       addSingleMarker(coords, row);
+      updateBadge();
+      updateStatusBar();
       leafletMap.setView([coords.lat, coords.lng], Math.max(leafletMap.getZoom(), 15));
       addAddressModal.classList.add('hidden');
-      showToast('Address added to map');
+      // Sync to Gist
+      btnAddAddrSubmit.textContent = 'Syncing…';
+      const ok = await updateGist(workOrders);
+      showToast(ok ? 'Address added & synced to cloud' : 'Address added locally (sync failed)');
     } else {
       addAddressStatus.textContent = 'Address not found — try a more specific query';
       addAddressStatus.classList.remove('hidden');
@@ -1712,7 +1779,68 @@ btnDeleteCompleted.addEventListener('click', () => {
 
 btnDeleteCancel.addEventListener('click', () => deleteConfirmModal.classList.add('hidden'));
 
-btnDeleteConfirm.addEventListener('click', () => {
+// ── Delete by Date ─────────────────────────────────────────────────────────
+const deleteByDateModal = document.getElementById('delete-by-date-modal');
+const deleteByDateInput = document.getElementById('delete-by-date-input');
+const deleteByDateCount = document.getElementById('delete-by-date-count');
+const btnDeleteByDate = document.getElementById('btn-delete-by-date');
+const btnDeleteByDateConfirm = document.getElementById('btn-delete-by-date-confirm');
+const btnDeleteByDateCancel = document.getElementById('btn-delete-by-date-cancel');
+
+btnDeleteByDate.addEventListener('click', () => {
+  closeBurgerMenu();
+  deleteByDateInput.value = todayISO();
+  updateDeleteByDateCount();
+  deleteByDateModal.classList.remove('hidden');
+});
+
+function updateDeleteByDateCount() {
+  const date = deleteByDateInput.value;
+  if (!date) { deleteByDateCount.textContent = ''; return; }
+  const n = workOrders.filter(r => (r['_assignDate'] || '').trim() === date).length;
+  deleteByDateCount.textContent = n
+    ? `${n} work order${n !== 1 ? 's' : ''} will be deleted.`
+    : 'No work orders found for this date.';
+  deleteByDateCount.style.color = n ? '#dc2626' : 'var(--text-medium)';
+  btnDeleteByDateConfirm.disabled = n === 0;
+}
+
+deleteByDateInput.addEventListener('input', updateDeleteByDateCount);
+btnDeleteByDateCancel.addEventListener('click', () => deleteByDateModal.classList.add('hidden'));
+
+btnDeleteByDateConfirm.addEventListener('click', async () => {
+  const date = deleteByDateInput.value;
+  if (!date) return;
+
+  const toDelete = new Set(
+    workOrders
+      .filter(r => (r['_assignDate'] || '').trim() === date)
+      .map(r => (r['Workorder'] || '').trim())
+      .filter(Boolean)
+  );
+  const n = toDelete.size;
+  if (!n) return;
+
+  geocodedPoints = geocodedPoints.filter(p => !toDelete.has((p.row['Workorder'] || '').trim()));
+  workOrders = workOrders.filter(r => !toDelete.has((r['Workorder'] || '').trim()));
+  toDelete.forEach(wo => delete completions[wo]);
+  saveCompletions();
+  savePoints();
+  try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
+
+  if (activeRow && toDelete.has((activeRow['Workorder'] || '').trim())) closeDetailSheet();
+
+  placeMarkers(getFilteredPoints(), false);
+  updateBadge();
+  updateStatusBar();
+  updateCompletedCountBadge();
+  deleteByDateModal.classList.add('hidden');
+
+  const ok = await updateGist(workOrders);
+  showToast(ok ? `${n} work order${n !== 1 ? 's' : ''} deleted & synced` : `${n} work order${n !== 1 ? 's' : ''} deleted locally (sync failed)`);
+});
+
+btnDeleteConfirm.addEventListener('click', async () => {
   const completedIds = new Set(Object.keys(completions));
   const n = completedIds.size;
 
@@ -1732,7 +1860,9 @@ btnDeleteConfirm.addEventListener('click', () => {
   updateStatusBar();
   updateCompletedCountBadge();
   deleteConfirmModal.classList.add('hidden');
-  showToast(`${n} work order${n !== 1 ? 's' : ''} deleted`);
+
+  const ok = await updateGist(workOrders);
+  showToast(ok ? `${n} work order${n !== 1 ? 's' : ''} deleted & synced` : `${n} work order${n !== 1 ? 's' : ''} deleted locally (sync failed)`);
 });
 
 function onNavClick(e) {
@@ -1761,7 +1891,6 @@ btnComplete.addEventListener('click', () => {
     btnComplete.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
       fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="20 6 9 17 4 12"/></svg> Complete`;
-    if (wo.startsWith('TN-')) btnDeleteNotice.style.display = 'none';
   } else {
     // Mark complete
     completions[wo] = { date: new Date().toLocaleString('en-CA') };
@@ -1772,30 +1901,138 @@ btnComplete.addEventListener('click', () => {
       fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="20 6 9 17 4 12"/></svg> Completed`;
     showToast('Work order completed');
-    if (wo.startsWith('TN-')) btnDeleteNotice.style.display = 'flex';
   }
   updateStatusBar();
   updateCompletedCountBadge();
 });
 
-btnDeleteNotice.addEventListener('click', () => {
+// ── Universal delete work order (covers regular WOs, TN- notices, and custom addresses) ──
+btnDeleteWO.addEventListener('click', async () => {
   if (!activeRow) return;
   const wo = (activeRow['Workorder'] || '').trim();
-  if (!wo.startsWith('TN-')) return;
-  
-  if (confirm('Permanently delete this Tenant Notice?')) {
-    geocodedPoints = geocodedPoints.filter(p => (p.row['Workorder'] || '').trim() !== wo);
-    workOrders = workOrders.filter(r => (r['Workorder'] || '').trim() !== wo);
-    delete completions[wo];
-    try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
+  const addr = (activeRow['Street Address'] || '').trim();
+  const label = activeRow._isCustom ? 'address' : 'work order';
+
+  if (!confirm(`Delete this ${label} (${addr || wo})? This will sync to all users.`)) return;
+
+  geocodedPoints = geocodedPoints.filter(p => (p.row['Workorder'] || '').trim() !== wo);
+  workOrders = workOrders.filter(r => (r['Workorder'] || '').trim() !== wo);
+  delete completions[wo];
+  saveCompletions();
+  savePoints();
+  try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
+
+  closeDetailSheet();
+  placeMarkers(getFilteredPoints(), false);
+  updateBadge();
+  updateStatusBar();
+  updateCompletedCountBadge();
+
+  const ok = await updateGist(workOrders);
+  showToast(ok ? `Deleted & synced to cloud` : `Deleted locally (sync failed)`);
+});
+
+// ── New Work Order ─────────────────────────────────────────────────────────
+function openNewWoModal() {
+  closeBurgerMenu();
+  nwoWorkorder.value = '';
+  nwoAddress.value = '';
+  nwoCity.value = '';
+  nwoNotifType.value = '';
+  nwoNotifCode.value = '';
+  nwoMeterNum.value = '';
+  nwoMeterSize.value = '';
+  nwoMeterLoc.value = '';
+  nwoLocNote.value = '';
+  newWoStatus.classList.add('hidden');
+  btnNewWoSubmit.disabled = false;
+  btnNewWoSubmit.textContent = 'Create & Add to Map';
+  newWoModal.classList.remove('hidden');
+  setTimeout(() => nwoAddress.focus(), 80);
+}
+
+btnNewWo.addEventListener('click', openNewWoModal);
+btnNewWoCancel.addEventListener('click', () => newWoModal.classList.add('hidden'));
+
+btnNewWoSubmit.addEventListener('click', async () => {
+  const addr = nwoAddress.value.trim();
+  if (!addr) {
+    newWoStatus.textContent = 'Street Address is required.';
+    newWoStatus.style.color = '#dc2626';
+    newWoStatus.classList.remove('hidden');
+    nwoAddress.focus();
+    return;
+  }
+
+  btnNewWoSubmit.disabled = true;
+  btnNewWoSubmit.textContent = 'Geocoding…';
+  newWoStatus.classList.add('hidden');
+
+  const city = nwoCity.value.trim();
+  const q = city ? `${addr}, ${city}, Ontario` : `${addr}, Ontario`;
+
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=ca`,
+      { headers: { 'User-Agent': 'WorkOrderMapPWA/1.0' } }
+    );
+    const data = await res.json();
+
+    if (!data || !data[0]) {
+      newWoStatus.textContent = 'Address not found — try a more specific query.';
+      newWoStatus.style.color = '#dc2626';
+      newWoStatus.classList.remove('hidden');
+      btnNewWoSubmit.disabled = false;
+      btnNewWoSubmit.textContent = 'Create & Add to Map';
+      return;
+    }
+
+    const lat = parseFloat(data[0].lat);
+    const lng = parseFloat(data[0].lon);
+    const woId = nwoWorkorder.value.trim() || (NEW_WO_ID_PREFIX + Date.now());
+
+    const row = {
+      'Workorder': woId,
+      'Street Address': addr,
+      'City': city,
+      'Notification Type': nwoNotifType.value,
+      'Notification Code': nwoNotifCode.value,
+      'Meter Number': nwoMeterNum.value.trim(),
+      'Meter Size': nwoMeterSize.value.trim(),
+      'Meter Location': nwoMeterLoc.value.trim(),
+      'Device Location Note': nwoLocNote.value.trim(),
+      'engineer': selectedEngineer,
+      '_lat': String(lat),
+      '_lng': String(lng),
+    };
+
+    // Save to geocache so relocations work
+    const cache = loadGeoCache();
+    const cacheKey = `${cleanAddressForGeocode(addr, '')},${city}`.toLowerCase();
+    cache[cacheKey] = { lat, lng };
+    saveGeoCache(cache);
+
+    workOrders.push(row);
+    geocodedPoints.push({ lat, lng, row });
     savePoints();
-    saveCompletions();
-    closeDetailSheet();
-    placeMarkers(getFilteredPoints(), false);
+    try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
+
+    addSingleMarker({ lat, lng }, row);
     updateBadge();
     updateStatusBar();
-    updateCompletedCountBadge();
-    showToast('Tenant Notice deleted');
+    if (leafletMap) leafletMap.setView([lat, lng], Math.max(leafletMap.getZoom(), 15));
+
+    newWoModal.classList.add('hidden');
+
+    btnNewWoSubmit.textContent = 'Syncing…';
+    const ok = await updateGist(workOrders);
+    showToast(ok ? `Work order ${woId} created & synced` : `Work order ${woId} created locally (sync failed)`);
+  } catch (_) {
+    newWoStatus.textContent = 'Network error — try again.';
+    newWoStatus.style.color = '#dc2626';
+    newWoStatus.classList.remove('hidden');
+    btnNewWoSubmit.disabled = false;
+    btnNewWoSubmit.textContent = 'Create & Add to Map';
   }
 });
 

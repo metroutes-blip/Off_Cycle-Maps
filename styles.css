@@ -861,6 +861,82 @@ html, body {
   gap: 8px;
 }
 
+/* ─── Delete work order button ──────────────── */
+.delete-wo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  width: 100%;
+  max-width: 240px;
+  padding: 12px 20px;
+  background: transparent;
+  color: #dc2626;
+  border: 2px solid #fca5a5;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.delete-wo-btn:active {
+  background: #fee2e2;
+  border-color: #dc2626;
+}
+
+/* ─── New Work Order modal form ──────────────── */
+.modal-sheet-tall {
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+.new-wo-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.new-wo-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.new-wo-row-2col {
+  flex-direction: row;
+  gap: 10px;
+}
+.new-wo-row-2col > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.new-wo-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.new-wo-required {
+  color: #dc2626;
+}
+.new-wo-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid var(--divider);
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: var(--white);
+  color: var(--text-dark);
+  appearance: auto;
+}
+
+
+
 /* ─── Bottom-right controls ─────────────────── */
 .map-controls-br {
   position: fixed;

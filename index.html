@@ -191,6 +191,25 @@
         <span class="burger-row-label">Show My Location</span>
       </button>
 
+      <button id="btn-new-wo" class="burger-row">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <span class="burger-row-label">New Work Order</span>
+      </button>
+
+      <button id="btn-delete-by-date" class="burger-row burger-row-danger">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        <span class="burger-row-label">Delete by Date</span>
+      </button>
+
       <button id="btn-delete-completed" class="burger-row burger-row-danger">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -388,14 +407,15 @@
           </svg>
           Complete
         </button>
-        <button id="btn-delete-notice" class="complete-btn" style="background:#ef4444; color:white; border-color:#dc2626; display:none; margin-top:10px;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+        <button id="btn-delete-wo" class="delete-wo-btn" style="display:none;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6"></polyline>
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
           </svg>
-          Delete Notice
+          Delete Work Order
         </button>
+
       </div>
 
     </div>
@@ -450,6 +470,99 @@
       <div class="modal-actions">
         <button id="btn-add-address-submit" class="modal-action-primary">Add to Map</button>
         <button id="btn-add-address-cancel" class="modal-action-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── New Work Order modal ─────────────────────── -->
+  <div id="new-wo-modal" class="modal-overlay hidden">
+    <div class="modal-sheet modal-sheet-tall">
+      <h2 class="modal-title">New Work Order</h2>
+      <div class="new-wo-form">
+        <div class="new-wo-row">
+          <label class="new-wo-label">Work Order #</label>
+          <input id="nwo-workorder" type="text" class="add-address-input" placeholder="Auto-generated if blank" autocomplete="off" />
+        </div>
+        <div class="new-wo-row">
+          <label class="new-wo-label">Street Address <span class="new-wo-required">*</span></label>
+          <input id="nwo-address" type="text" class="add-address-input" placeholder="123 Main St" autocomplete="off" />
+        </div>
+        <div class="new-wo-row">
+          <label class="new-wo-label">City</label>
+          <input id="nwo-city" type="text" class="add-address-input" placeholder="e.g. Ottawa" autocomplete="off" />
+        </div>
+        <div class="new-wo-row new-wo-row-2col">
+          <div>
+            <label class="new-wo-label">Notification Type</label>
+            <select id="nwo-notif-type" class="new-wo-select">
+              <option value="">—</option>
+              <option value="ZB">ZB</option>
+              <option value="YD">YD</option>
+              <option value="YE">YE</option>
+              <option value="ZR">ZR</option>
+              <option value="ZT">ZT</option>
+              <option value="ZV">ZV</option>
+            </select>
+          </div>
+          <div>
+            <label class="new-wo-label">Notification Code</label>
+            <select id="nwo-notif-code" class="new-wo-select">
+              <option value="">—</option>
+              <option value="RDLK">RDLK</option>
+              <option value="LKFS">LKFS</option>
+              <option value="LKSN">LKSN</option>
+              <option value="TLOC">TLOC</option>
+              <option value="LOCK">LOCK</option>
+              <option value="LKOO">LKOO</option>
+              <option value="RMBE">RMBE</option>
+              <option value="TC01">TC01</option>
+              <option value="MOVE">MOVE</option>
+              <option value="MT31">MT31</option>
+              <option value="ESTS">ESTS</option>
+              <option value="CKRD">CKRD</option>
+            </select>
+          </div>
+        </div>
+        <div class="new-wo-row new-wo-row-2col">
+          <div>
+            <label class="new-wo-label">Meter Number</label>
+            <input id="nwo-meter-num" type="text" class="add-address-input" placeholder="Meter #" autocomplete="off" />
+          </div>
+          <div>
+            <label class="new-wo-label">Meter Size</label>
+            <input id="nwo-meter-size" type="text" class="add-address-input" placeholder="Size" autocomplete="off" />
+          </div>
+        </div>
+        <div class="new-wo-row">
+          <label class="new-wo-label">Meter Location</label>
+          <input id="nwo-meter-loc" type="text" class="add-address-input" placeholder="e.g. basement" autocomplete="off" />
+        </div>
+        <div class="new-wo-row">
+          <label class="new-wo-label">Location Note</label>
+          <input id="nwo-loc-note" type="text" class="add-address-input" placeholder="Optional note" autocomplete="off" />
+        </div>
+      </div>
+      <div id="new-wo-status" class="add-address-status hidden"></div>
+      <div class="modal-actions">
+        <button id="btn-new-wo-submit" class="modal-action-primary">Create &amp; Add to Map</button>
+        <button id="btn-new-wo-cancel" class="modal-action-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Delete by date modal ─────────────────────── -->
+  <div id="delete-by-date-modal" class="modal-overlay hidden">
+    <div class="modal-sheet">
+      <h2 class="modal-title">Delete by Date</h2>
+      <p class="modal-desc">Select an assigned date to delete all work orders on that date.</p>
+      <div class="new-wo-row" style="margin-bottom:14px;">
+        <label class="new-wo-label">Assigned Date</label>
+        <input id="delete-by-date-input" type="date" class="add-address-input" />
+      </div>
+      <p id="delete-by-date-count" class="modal-desc" style="font-weight:600; min-height:1.2em;"></p>
+      <div class="modal-actions">
+        <button id="btn-delete-by-date-confirm" class="modal-action-danger">Delete</button>
+        <button id="btn-delete-by-date-cancel" class="modal-action-secondary">Cancel</button>
       </div>
     </div>
   </div>
