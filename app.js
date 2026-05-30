@@ -5,15 +5,16 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v4.9';
+const APP_VERSION = 'v5.0';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
 const SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmjcAZ6v2j5Lrs_XhyPovwduIdtVjfnQKr0bqOau-MSyW3nuePnfoHsFAU4-OJWxilBqxCL3DKe2AA/pub?gid=0&single=true&output=csv';
 
 // GitHub Gist — receives work order exports from MMR Setup (public gist, no token needed)
-const GITHUB_TOKEN = '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';
+const GITHUB_TOKEN = '';
 const GITHUB_GIST_ID = 'aa005d9b6708553fc37317c35900aefb';
+const GIST_PROXY_URL = 'https://shy-mud-c443.metroutes.workers.dev';
 
 // ── Engineer PINs ─────────────────────────────
 // Key: engineer name exactly as it appears in Google Sheets
@@ -290,19 +291,16 @@ async function fetchFromGist() {
   return null;
 }
 
-// ── GitHub Gist write-back ──────────────────────
+// ── GitHub Gist write-back (via Cloudflare Worker proxy) ──────────────────
 async function updateGist(records) {
-  if (!GITHUB_TOKEN || !GITHUB_GIST_ID) {
-    showToast('Gist not configured — change not saved to cloud', true);
+  if (!GIST_PROXY_URL) {
+    showToast('Gist proxy not configured — change not saved to cloud', true);
     return false;
   }
   try {
-    const res = await fetch(`https://api.github.com/gists/${GITHUB_GIST_ID}`, {
+    const res = await fetch(GIST_PROXY_URL, {
       method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${GITHUB_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         files: {
           'workorders.json': { content: JSON.stringify(records, null, 2) },
@@ -312,7 +310,7 @@ async function updateGist(records) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error('Gist update failed:', res.status, err);
-      showToast('Failed to sync to cloud — check token permissions', true);
+      showToast('Failed to sync to cloud', true);
       return false;
     }
     return true;
