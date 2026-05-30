@@ -5,14 +5,14 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v4.8';
+const APP_VERSION = 'v4.9';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
 const SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmjcAZ6v2j5Lrs_XhyPovwduIdtVjfnQKr0bqOau-MSyW3nuePnfoHsFAU4-OJWxilBqxCL3DKe2AA/pub?gid=0&single=true&output=csv';
 
 // GitHub Gist — receives work order exports from MMR Setup (public gist, no token needed)
-const GITHUB_TOKEN = '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';
+const GITHUB_TOKEN = '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';
 const GITHUB_GIST_ID = 'aa005d9b6708553fc37317c35900aefb';
 
 // ── Engineer PINs ─────────────────────────────
