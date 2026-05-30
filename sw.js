@@ -1,6 +1,6 @@
 /* Service Worker — Work Order Map PWA — Enables offline use after first load */
 
-const CACHE_NAME = 'wo-map-v4.6';
+const CACHE_NAME = 'wo-map-v4.7';
 const CACHE_FILES = [
   './',
   './index.html',
