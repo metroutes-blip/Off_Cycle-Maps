@@ -5,7 +5,7 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v4.7';
+const APP_VERSION = 'v4.8';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
@@ -1794,10 +1794,17 @@ btnDeleteByDate.addEventListener('click', () => {
   deleteByDateModal.classList.remove('hidden');
 });
 
+function myWorkOrdersOnDate(date) {
+  return workOrders.filter(r =>
+    (r['_assignDate'] || '').trim() === date &&
+    (!selectedEngineer || r['_isCustom'] || (r['engineer'] || '').trim() === selectedEngineer)
+  );
+}
+
 function updateDeleteByDateCount() {
   const date = deleteByDateInput.value;
   if (!date) { deleteByDateCount.textContent = ''; return; }
-  const n = workOrders.filter(r => (r['_assignDate'] || '').trim() === date).length;
+  const n = myWorkOrdersOnDate(date).length;
   deleteByDateCount.textContent = n
     ? `${n} work order${n !== 1 ? 's' : ''} will be deleted.`
     : 'No work orders found for this date.';
@@ -1813,8 +1820,7 @@ btnDeleteByDateConfirm.addEventListener('click', async () => {
   if (!date) return;
 
   const toDelete = new Set(
-    workOrders
-      .filter(r => (r['_assignDate'] || '').trim() === date)
+    myWorkOrdersOnDate(date)
       .map(r => (r['Workorder'] || '').trim())
       .filter(Boolean)
   );

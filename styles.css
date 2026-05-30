@@ -1012,9 +1012,10 @@ html, body {
   overflow-y: auto;
   overflow-x: hidden;
   min-width: 272px;
-  max-height: calc(100dvh - 80px);
+  max-height: calc(100dvh - 120px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
   -webkit-overflow-scrolling: touch;
+  padding-bottom: 8px;
 }
 
 .burger-section-label {
