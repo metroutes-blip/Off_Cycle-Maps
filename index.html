@@ -160,6 +160,18 @@
         <span class="burger-toggle-pill"></span>
       </button>
 
+      <div class="burger-section-label">Admin</div>
+
+      <button id="btn-set-token" class="burger-row">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <span class="burger-row-label">Set Sync Token</span>
+        <span class="burger-row-value" id="token-status-label"></span>
+      </button>
+
       <div class="burger-section-label">Actions</div>
 
       <button id="btn-list-view" class="burger-row">
@@ -470,6 +482,21 @@
       <div class="modal-actions">
         <button id="btn-add-address-submit" class="modal-action-primary">Add to Map</button>
         <button id="btn-add-address-cancel" class="modal-action-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Set Sync Token modal ─────────────────────── -->
+  <div id="set-token-modal" class="modal-overlay hidden">
+    <div class="modal-sheet">
+      <h2 class="modal-title">Set Sync Token</h2>
+      <p class="modal-desc">Enter the GitHub personal access token for the metroutes-blip account. This is stored only on this device.</p>
+      <input id="set-token-input" type="password" class="add-address-input"
+             placeholder="ghp_..." autocomplete="off" />
+      <div class="modal-actions">
+        <button id="btn-set-token-save" class="modal-action-primary">Save</button>
+        <button id="btn-set-token-clear" class="modal-action-secondary">Clear Token</button>
+        <button id="btn-set-token-cancel" class="modal-action-secondary">Cancel</button>
       </div>
     </div>
   </div>

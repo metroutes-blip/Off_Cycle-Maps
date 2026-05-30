@@ -5,16 +5,16 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v5.1';
+const APP_VERSION = 'v5.2';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
 const SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmjcAZ6v2j5Lrs_XhyPovwduIdtVjfnQKr0bqOau-MSyW3nuePnfoHsFAU4-OJWxilBqxCL3DKe2AA/pub?gid=0&single=true&output=csv';
 
-// GitHub Gist — receives work order exports from MMR Setup (public gist, no token needed)
-const GITHUB_TOKEN = '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';
+// GitHub Gist — token is stored in localStorage, entered once via the burger menu
 const GITHUB_GIST_ID = 'aa005d9b6708553fc37317c35900aefb';
-const GIST_PROXY_URL = 'https://shy-mud-c443.metroutes.workers.dev';
+const GIST_TOKEN_KEY = 'wo_gist_token';
+function getGistToken() { return localStorage.getItem(GIST_TOKEN_KEY) || ''; }
 
 // ── Engineer PINs ─────────────────────────────
 // Key: engineer name exactly as it appears in Google Sheets
@@ -270,37 +270,39 @@ function parseCSV(text) {
 
 // ── GitHub Gist fetch ──────────────────────────
 async function fetchFromGist() {
-  const headers = { 'Authorization': `Bearer ${GITHUB_TOKEN}` };
-  // Also try without auth in case token has been revoked (public gist fallback)
-  for (const reqHeaders of [headers, {}]) {
-    try {
-      const res = await fetch(`https://api.github.com/gists/${GITHUB_GIST_ID}`, {
-        cache: 'no-store',
-        headers: reqHeaders,
-      });
-      if (!res.ok) continue;
-      const data = await res.json();
-      const content = data.files?.['workorders.json']?.content;
-      if (!content) continue;
-      const records = JSON.parse(content);
-      if (Array.isArray(records) && records.length && records[0]['Street Address'] !== undefined) {
-        return records;
-      }
-    } catch (_) { }
-  }
+  const token = getGistToken();
+  const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+  try {
+    const res = await fetch(`https://api.github.com/gists/${GITHUB_GIST_ID}`, {
+      cache: 'no-store',
+      headers,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data.files?.['workorders.json']?.content;
+    if (!content) return null;
+    const records = JSON.parse(content);
+    if (Array.isArray(records) && records.length && records[0]['Street Address'] !== undefined) {
+      return records;
+    }
+  } catch (_) { }
   return null;
 }
 
-// ── GitHub Gist write-back (via Cloudflare Worker proxy) ──────────────────
+// ── GitHub Gist write-back ──────────────────────
 async function updateGist(records) {
-  if (!GIST_PROXY_URL) {
-    showToast('Gist proxy not configured — change not saved to cloud', true);
+  const token = getGistToken();
+  if (!token) {
+    showToast('No sync token set — open the burger menu → Set Sync Token', true);
     return false;
   }
   try {
-    const res = await fetch(GIST_PROXY_URL, {
+    const res = await fetch(`https://api.github.com/gists/${GITHUB_GIST_ID}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         files: {
           'workorders.json': { content: JSON.stringify(records, null, 2) },
@@ -1276,7 +1278,7 @@ async function reloadFromSheets() {
 
   // Fall back to Google Sheets
   const csvText = await fetchCSVFromSheets();
-  btnRefresh.classList.remove('is-loading');
+  if (btnRefresh) btnRefresh.classList.remove('is-loading');
   if (csvText) {
     const records = parseCSV(csvText);
     if (records.length && records[0].hasOwnProperty('Street Address')) {
@@ -1956,6 +1958,46 @@ function openNewWoModal() {
 }
 
 btnNewWo.addEventListener('click', openNewWoModal);
+
+// ── Set Sync Token ─────────────────────────────────────────────────────────
+const setTokenModal = document.getElementById('set-token-modal');
+const setTokenInput = document.getElementById('set-token-input');
+const btnSetToken = document.getElementById('btn-set-token');
+const btnSetTokenSave = document.getElementById('btn-set-token-save');
+const btnSetTokenClear = document.getElementById('btn-set-token-clear');
+const btnSetTokenCancel = document.getElementById('btn-set-token-cancel');
+const tokenStatusLabel = document.getElementById('token-status-label');
+
+function updateTokenStatusLabel() {
+  tokenStatusLabel.textContent = getGistToken() ? 'Set ✓' : 'Not set';
+  tokenStatusLabel.style.color = getGistToken() ? '#22c55e' : '#f97316';
+}
+
+btnSetToken.addEventListener('click', () => {
+  closeBurgerMenu();
+  setTokenInput.value = getGistToken();
+  setTokenModal.classList.remove('hidden');
+  setTimeout(() => setTokenInput.focus(), 80);
+});
+
+btnSetTokenSave.addEventListener('click', () => {
+  const val = setTokenInput.value.trim();
+  if (!val) { showToast('Token cannot be empty', true); return; }
+  localStorage.setItem(GIST_TOKEN_KEY, val);
+  updateTokenStatusLabel();
+  setTokenModal.classList.add('hidden');
+  showToast('Sync token saved');
+});
+
+btnSetTokenClear.addEventListener('click', () => {
+  localStorage.removeItem(GIST_TOKEN_KEY);
+  setTokenInput.value = '';
+  updateTokenStatusLabel();
+  setTokenModal.classList.add('hidden');
+  showToast('Sync token cleared');
+});
+
+btnSetTokenCancel.addEventListener('click', () => setTokenModal.classList.add('hidden'));
 btnNewWoCancel.addEventListener('click', () => newWoModal.classList.add('hidden'));
 
 btnNewWoSubmit.addEventListener('click', async () => {
@@ -2145,6 +2187,7 @@ function boot() {
   completions = loadCompletions();
   purgeOldCompletions();   // remove work orders completed before today
   updateCompletedCountBadge();
+  updateTokenStatusLabel();
 
   // Hide splash after letter animation sequence completes (~4.3s)
   setTimeout(() => {
