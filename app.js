@@ -5,7 +5,7 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v5.2';
+const APP_VERSION = 'v5.8';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
@@ -62,6 +62,7 @@ let geocodeFailures = [];       // { row, query }
 let completions = {};       // { [workorder]: { date } }
 let mapInitialized = false;
 let leafletMap = null;
+let clusterGroup = null;     // L.markerClusterGroup holding all WO markers
 let mapMarkers = [];
 let userLocationMarker = null;
 let gpsWatching = false;
@@ -172,6 +173,13 @@ const mergeModal = document.getElementById('merge-modal');
 const mergeModalDesc = document.getElementById('merge-modal-desc');
 const btnMergeKeep = document.getElementById('btn-merge-keep');
 const btnMergeFresh = document.getElementById('btn-merge-fresh');
+const btnUploadCsv = document.getElementById('btn-upload-csv');
+const csvFileInput = document.getElementById('csv-file-input');
+const uploadCsvModal = document.getElementById('upload-csv-modal');
+const uploadCsvDesc = document.getElementById('upload-csv-desc');
+const uploadAssignDate = document.getElementById('upload-assign-date');
+const btnUploadConfirm = document.getElementById('btn-upload-confirm');
+const btnUploadCancel = document.getElementById('btn-upload-cancel');
 const listViewPanel = document.getElementById('list-view-panel');
 const listViewBody = document.getElementById('list-view-body');
 const listViewCount = document.getElementById('list-view-count');
@@ -266,6 +274,52 @@ function parseCSV(text) {
     });
     return obj;
   });
+}
+
+// ── Uploaded CSV normalisation ─────────────────
+// RDLK list exports write the lock end as "Jun 22 (Mon)" — no year, weekday in
+// brackets. new Date() would guess year 2001 and mark every lock overdue, so
+// strip the bracket part and infer the year (assume next year only when the
+// date would otherwise be more than ~6 months in the past).
+function parseLockEndDate(val) {
+  const s = (val || '').replace(/\(.*?\)/g, '').trim();
+  if (!s) return '';
+  if (/\d{4}/.test(s)) return s; // already has a year
+  const now = new Date();
+  let d = new Date(`${s}, ${now.getFullYear()}`);
+  if (isNaN(d.getTime())) return s;
+  if (d.getTime() < now.getTime() - 182 * 24 * 3600 * 1000) {
+    d = new Date(`${s}, ${now.getFullYear() + 1}`);
+  }
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
+// Maps a raw Maximo "MMR_Workorder_List" export (headers like "Work Order",
+// "Target Start", "Red Lock Type") onto the record schema the app and the
+// Gist use ("Workorder", "targetfinish", "Notification Code", ...). Rows that
+// are already in app format pass through unchanged.
+function normalizeUploadedRows(rows, assignDate) {
+  return rows.map(r => ({
+    'Workorder': (r['Workorder'] || r['Work Order'] || '').trim(),
+    'Street Address': (r['Street Address'] || '').trim(),
+    'Mis Address': (r['Mis Address'] || '').trim(),
+    'City': (r['City'] || '').trim(),
+    'engineer': (r['engineer'] || r['Engineer'] || '').trim(),
+    'Notification Code': (r['Notification Code'] || r['Red Lock Type'] || '').trim().toUpperCase(),
+    'Notification Type': (r['Notification Type'] || '').trim(),
+    'Meter Location': (r['Meter Location'] || '').trim(),
+    'Meter Number': (r['Meter Number'] || '').trim(),
+    'Meter Size': (r['Meter Size'] || '').trim(),
+    'Grid': (r['Grid'] || ((r['Grid Letter'] || '').trim() + (r['Grid #'] || '').trim())).trim(),
+    'Device Location Note': (r['Device Location Note'] || '').trim(),
+    'targetstart': (r['targetstart'] || r['Target Start'] || '').trim(),
+    // RDLK lists carry the due date in "Lock End Date"; it beats Target Start
+    'targetfinish': (r['targetfinish'] || parseLockEndDate(r['Lock End Date']) ||
+      r['Target Finish'] || r['targetstart'] || r['Target Start'] || '').trim(),
+    'aptstart': (r['aptstart'] || r['Appt Start'] || '').trim(),
+    '_assignDate': (r['_assignDate'] || assignDate || '').trim(),
+  })).filter(r => r['Workorder'] && r['Street Address']);
 }
 
 // ── GitHub Gist fetch ──────────────────────────
@@ -527,14 +581,13 @@ function getMarkerColor(row) {
   return '#3b82f6';                           // default blue
 }
 
-function postItBg(color) {
-  return `<path d="M3 3 h20 v14 l-6 6 h-14 z" fill="${color}" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
-    <polygon points="23 17, 17 17, 17 23" fill="rgba(0,0,0,0.15)"/>`;
+function markerBg(color) {
+  return `<circle cx="13" cy="13" r="10" fill="${color}" stroke="#fff" stroke-width="1.8"/>`;
 }
 
 function makeCircleIcon(color) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    ${postItBg(color)}
+    ${markerBg(color)}
   </svg>`;
   return L.divIcon({ html: svg, className: '', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -14] });
 }
@@ -619,7 +672,7 @@ function makeLockIcon(bgColor, keyColor, badge = null) {
       <text x="21" y="7.8" text-anchor="middle" font-size="6" font-weight="bold" fill="#dc2626">!</text>`;
   }
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    ${postItBg(bgColor)}
+    ${markerBg(bgColor)}
     <rect x="9" y="12" width="8" height="6" rx="1.2" fill="#fff"/>
     <path d="M10.5 12v-2a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
     <circle cx="13" cy="15" r="1" fill="${keyColor}"/>
@@ -629,9 +682,9 @@ function makeLockIcon(bgColor, keyColor, badge = null) {
 }
 
 function makeOpenLockIcon() {
-  // Dark grey post-it with an open padlock (shackle raised on right side)
+  // Dark grey circle with an open padlock (shackle raised on right side)
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    ${postItBg('#4b5563')}
+    ${markerBg('#4b5563')}
     <rect x="9" y="13" width="8" height="6" rx="1.2" fill="#fff"/>
     <path d="M10.5 13v-3a2.5 2.5 0 0 1 5 0" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
     <circle cx="13" cy="16" r="1" fill="#4b5563"/>
@@ -641,7 +694,7 @@ function makeOpenLockIcon() {
 
 function makeBatteryIcon() {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    ${postItBg('#f97316')}
+    ${markerBg('#f97316')}
     <rect x="7" y="10.5" width="10" height="5.5" rx="1.2" fill="none" stroke="#fff" stroke-width="1.5"/>
     <rect x="17" y="12" width="2" height="2.5" rx="0.5" fill="#fff"/>
     <line x1="9.5" y1="13.25" x2="11.5" y2="13.25" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
@@ -650,9 +703,9 @@ function makeBatteryIcon() {
 }
 
 function makeTamperIcon() {
-  // Turquoise post-it: closed lock body with a "!" exclamation — tamper alert
+  // Turquoise circle: closed lock body with a "!" exclamation — tamper alert
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    ${postItBg('#0d9488')}
+    ${markerBg('#0d9488')}
     <rect x="9.5" y="12.5" width="7" height="5.5" rx="1.2" fill="#fff"/>
     <path d="M11 12.5v-1.8a2 2 0 0 1 4 0v1.8" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
     <line x1="13" y1="14.2" x2="13" y2="16" stroke="#0d9488" stroke-width="1.4" stroke-linecap="round"/>
@@ -662,9 +715,9 @@ function makeTamperIcon() {
 }
 
 function makeMoveIcon() {
-  // Blue post-it with a bold right-pointing arrow — represents relocation/move
+  // Blue circle with a bold right-pointing arrow — represents relocation/move
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    ${postItBg('#3b82f6')}
+    ${markerBg('#3b82f6')}
     <line x1="7" y1="13" x2="17" y2="13" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
     <polyline points="13,9 17,13 13,17" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
@@ -672,9 +725,9 @@ function makeMoveIcon() {
 }
 
 function makeSpecialReadIcon() {
-  // Yellow post-it with a checkmark — special/check read
+  // Yellow circle with a checkmark — special/check read
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
-    ${postItBg('#eab308')}
+    ${markerBg('#eab308')}
     <polyline points="7.5,13.5 11,17 18.5,9" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
   return L.divIcon({ html: svg, className: '', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -16] });
@@ -694,15 +747,34 @@ function makeBaseMarkerIcon(row) {
   return makeCircleIcon(getMarkerColor(row));
 }
 
-function makeMarkerIcon(row) {
-  if (row._isCustom) return makeCircleIcon('#7c3aed');
-  if (completions[row['Workorder'] || '']) return makeCircleIcon('#d1d5db');
-  return makeBaseMarkerIcon(row);
+function makeMarkerIcon(row, count = 1) {
+  let icon;
+  if (row._isCustom) icon = makeCircleIcon('#7c3aed');
+  else if (completions[row['Workorder'] || '']) icon = makeCircleIcon('#d1d5db');
+  else icon = makeBaseMarkerIcon(row);
+  if (count > 1) {
+    icon = L.divIcon({
+      html: `<div class="wo-marker-wrap">${icon.options.html}<span class="wo-stack-badge">${count}</span></div>`,
+      className: '',
+      iconSize: icon.options.iconSize,
+      iconAnchor: icon.options.iconAnchor,
+      popupAnchor: icon.options.popupAnchor,
+    });
+  }
+  return icon;
 }
 
 function refreshMarkerIcon(workorder) {
   const entry = mapMarkers.find(m => (m.row['Workorder'] || '') === workorder);
-  if (entry) entry.marker.setIcon(makeMarkerIcon(entry.row));
+  if (!entry) return;
+  // Completing/un-completing changes the to-do count for every marker
+  // stacked at the same coordinates, so refresh the whole stack
+  const peers = entry.key ? mapMarkers.filter(m => m.key === entry.key) : [entry];
+  const count = peers.filter(m => !completions[m.row['Workorder'] || '']).length;
+  peers.forEach(m => {
+    m.marker.setIcon(makeMarkerIcon(m.row, count));
+    m.marker.setZIndexOffset(completions[m.row['Workorder'] || ''] ? -100 : 0);
+  });
 }
 
 // ── Map initialisation ────────────────────────
@@ -746,6 +818,17 @@ function initLeafletMap() {
   if (mapInitialized) return;
 
   leafletMap = L.map('map-container', { zoomControl: true });
+
+  clusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 40,
+    disableClusteringAtZoom: 16,   // street level: individual icons + count badges take over
+    spiderfyOnMaxZoom: false,
+    showCoverageOnHover: false,
+    iconCreateFunction: (c) => L.divIcon({
+      html: `<div class="wo-cluster-icon">${c.getChildCount()}</div>`,
+      className: '', iconSize: [34, 34], iconAnchor: [17, 17],
+    }),
+  }).addTo(leafletMap);
 
   darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
   applyTileTheme(mapStyle);
@@ -802,7 +885,7 @@ function resetGpsTimer() {
 
 // ── Place markers ─────────────────────────────
 function clearMapMarkers() {
-  mapMarkers.forEach(({ marker }) => marker.remove());
+  if (clusterGroup) clusterGroup.clearLayers();
   mapMarkers = [];
 }
 
@@ -811,8 +894,18 @@ function placeMarkers(points, zoomToFit = true) {
   clearMapMarkers();
   const bounds = [];
 
+  // Count incomplete WOs sharing the exact same coordinates so stacked
+  // markers get a badge showing how many are still to do there
+  const coordCounts = {};
   points.forEach(({ lat, lng, row }) => {
-    const icon = makeMarkerIcon(row);
+    if (completions[row['Workorder'] || '']) return;
+    const key = `${lat},${lng}`;
+    coordCounts[key] = (coordCounts[key] || 0) + 1;
+  });
+
+  points.forEach(({ lat, lng, row }) => {
+    const key = `${lat},${lng}`;
+    const icon = makeMarkerIcon(row, coordCounts[key] || 0);
     const addr = (row['Street Address'] || '').trim();
     const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
     const appleUrl = `https://maps.apple.com/?daddr=${lat},${lng}`;
@@ -823,8 +916,8 @@ function placeMarkers(points, zoomToFit = true) {
       · <a href="${appleUrl}" target="_blank" rel="noopener" class="popup-nav-link">Apple</a>
       · <a href="${wazeUrl}" target="_blank" rel="noopener" class="popup-nav-link">Waze</a>`;
 
-    const marker = L.marker([lat, lng], { icon })
-      .addTo(leafletMap)
+    // Completed (grey) markers sit below active ones so they never hide a live job
+    const marker = L.marker([lat, lng], { icon, zIndexOffset: completions[row['Workorder'] || ''] ? -100 : 0 })
       .bindPopup(popup, { autoClose: false, closeOnClick: false });
 
     if (addr) {
@@ -844,7 +937,8 @@ function placeMarkers(points, zoomToFit = true) {
       openDetailSheet(row, lat, lng);
     });
 
-    mapMarkers.push({ marker, row });
+    clusterGroup.addLayer(marker);
+    mapMarkers.push({ marker, row, key });
     bounds.push([lat, lng]);
   });
 
@@ -856,7 +950,10 @@ function placeMarkers(points, zoomToFit = true) {
 
 // ── Add a single marker (from geocode fix) ────
 function addSingleMarker(coords, row) {
-  const icon = makeMarkerIcon(row);
+  const key = `${coords.lat},${coords.lng}`;
+  const count = geocodedPoints.filter(p =>
+    p.lat === coords.lat && p.lng === coords.lng && !completions[p.row['Workorder'] || '']).length || 1;
+  const icon = makeMarkerIcon(row, count);
   const addr = (row['Street Address'] || '').trim();
   const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`;
   const appleUrl = `https://maps.apple.com/?daddr=${coords.lat},${coords.lng}`;
@@ -867,7 +964,6 @@ function addSingleMarker(coords, row) {
     · <a href="${wazeUrl}" target="_blank" rel="noopener" class="popup-nav-link">Waze</a>`;
 
   const marker = L.marker([coords.lat, coords.lng], { icon })
-    .addTo(leafletMap)
     .bindPopup(popup, { autoClose: false, closeOnClick: false });
 
   marker.on('click', (e) => {
@@ -877,7 +973,8 @@ function addSingleMarker(coords, row) {
     openDetailSheet(row, coords.lat, coords.lng);
   });
 
-  mapMarkers.push({ marker, row });
+  clusterGroup.addLayer(marker);
+  mapMarkers.push({ marker, row, key });
 }
 
 // ── Not-found banner ──────────────────────────
@@ -1292,6 +1389,82 @@ async function reloadFromSheets() {
 
 btnLoadNew.addEventListener('click', reloadFromSheets);
 if (btnRefresh) btnRefresh.addEventListener('click', reloadFromSheets);
+
+// ── Upload CSV file ───────────────────────────
+let pendingUpload = null; // { rows, filename }
+
+btnUploadCsv.addEventListener('click', () => {
+  closeBurgerMenu();
+  csvFileInput.value = '';
+  csvFileInput.click();
+});
+
+csvFileInput.addEventListener('change', () => {
+  const file = csvFileInput.files && csvFileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let rows = [];
+    try { rows = parseCSV(String(reader.result)); } catch (_) { }
+    const hasCols = rows.length &&
+      rows[0]['Street Address'] !== undefined &&
+      (rows[0]['Work Order'] !== undefined || rows[0]['Workorder'] !== undefined);
+    if (!hasCols) {
+      showToast('Could not read that file — needs Street Address and Work Order columns', true);
+      return;
+    }
+    pendingUpload = { rows, filename: file.name };
+    uploadCsvDesc.textContent = `${rows.length} work order${rows.length !== 1 ? 's' : ''} found in ${file.name}.`;
+    uploadAssignDate.value = todayISO();
+    uploadCsvModal.classList.remove('hidden');
+  };
+  reader.onerror = () => showToast('Could not read that file', true);
+  reader.readAsText(file);
+});
+
+btnUploadCancel.addEventListener('click', () => {
+  pendingUpload = null;
+  uploadCsvModal.classList.add('hidden');
+});
+
+btnUploadConfirm.addEventListener('click', async () => {
+  if (!pendingUpload) return;
+  const assignDate = uploadAssignDate.value || todayISO();
+  const uploaded = normalizeUploadedRows(pendingUpload.rows, assignDate);
+  const filename = pendingUpload.filename;
+  pendingUpload = null;
+  uploadCsvModal.classList.add('hidden');
+
+  if (!uploaded.length) {
+    showToast('No usable work orders in that file', true);
+    return;
+  }
+
+  // Merge with the cloud list so other engineers' work orders are kept —
+  // uploaded rows replace any existing record with the same Workorder.
+  const uploadedIds = new Set(uploaded.map(r => r['Workorder']));
+  const existing = (await fetchFromGist()) || [];
+  const merged = existing
+    .filter(r => !uploadedIds.has((r['Workorder'] || '').trim()))
+    .concat(uploaded);
+
+  const prevEngineer = selectedEngineer;
+  applyNewCSV(merged, false);
+
+  // Stay signed in: skip the engineer picker and go straight back to the map
+  if (prevEngineer && merged.some(r => (r['engineer'] || '').trim() === prevEngineer)) {
+    selectEngineer(prevEngineer);
+  }
+
+  showToast(`${uploaded.length} work order${uploaded.length !== 1 ? 's' : ''} loaded from ${filename}`);
+
+  if (getGistToken()) {
+    const ok = await updateGist(merged);
+    if (ok) showToast('Synced to cloud — all devices will get this list');
+  } else {
+    showToast('Loaded on this device only — set a sync token to share to all devices');
+  }
+});
 
 detailClose.addEventListener('click', closeDetailSheet);
 

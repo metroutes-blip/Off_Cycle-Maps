@@ -9,6 +9,7 @@
   <title>Work Order Map</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -201,6 +202,17 @@
           <circle cx="12" cy="7" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/>
         </svg>
         <span class="burger-row-label">Show My Location</span>
+      </button>
+
+      <button id="btn-upload-csv" class="burger-row">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="12" y1="18" x2="12" y2="12"/>
+          <polyline points="9 15 12 12 15 15"/>
+        </svg>
+        <span class="burger-row-label">Upload CSV File</span>
       </button>
 
       <button id="btn-new-wo" class="burger-row">
@@ -445,6 +457,21 @@
     </div>
   </div>
 
+  <!-- ── Upload CSV modal ───────────────────────── -->
+  <input id="csv-file-input" type="file" accept=".csv,text/csv" style="display:none" />
+  <div id="upload-csv-modal" class="modal-overlay hidden">
+    <div class="modal-sheet">
+      <h2 class="modal-title">Upload CSV</h2>
+      <p id="upload-csv-desc" class="modal-desc"></p>
+      <label class="modal-desc" for="upload-assign-date">Assign date (used by the date filters):</label>
+      <input id="upload-assign-date" type="date" class="add-address-input" />
+      <div class="modal-actions">
+        <button id="btn-upload-confirm" class="modal-action-primary">Load Work Orders</button>
+        <button id="btn-upload-cancel" class="modal-action-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Geocode fix modal ──────────────────────── -->
   <div id="geocode-fix-modal" class="modal-overlay hidden">
     <div class="modal-sheet">
@@ -610,6 +637,7 @@
   <div id="toast" class="toast hidden"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>

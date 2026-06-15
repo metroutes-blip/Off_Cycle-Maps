@@ -1,6 +1,6 @@
 /* Service Worker — Work Order Map PWA — Enables offline use after first load */
 
-const CACHE_NAME = 'wo-map-v5.2';
+const CACHE_NAME = 'wo-map-v5.8';
 const CACHE_FILES = [
   './',
   './index.html',
@@ -9,6 +9,8 @@ const CACHE_FILES = [
   './manifest.json',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+  'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css',
+  'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js',
 ];
 
 self.addEventListener('install', (e) => {
