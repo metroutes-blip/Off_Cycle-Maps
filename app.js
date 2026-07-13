@@ -5,7 +5,7 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v5.8';
+const APP_VERSION = 'v5.9';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
@@ -319,6 +319,9 @@ function normalizeUploadedRows(rows, assignDate) {
       r['Target Finish'] || r['targetstart'] || r['Target Start'] || '').trim(),
     'aptstart': (r['aptstart'] || r['Appt Start'] || '').trim(),
     '_assignDate': (r['_assignDate'] || assignDate || '').trim(),
+    // Placed-notice type from the MMR Combined tab (tenant_notice, tenant_rdlk,
+    // school_read, special_rmbe, special_read) — drives a distinctive marker icon.
+    '_placedType': (r['_placedType'] || '').trim(),
   })).filter(r => r['Workorder'] && r['Street Address']);
 }
 
@@ -733,7 +736,75 @@ function makeSpecialReadIcon() {
   return L.divIcon({ html: svg, className: '', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -16] });
 }
 
+// ── Placed-notice icons (from MMR Combined tab) ───────────────────────────
+// These mirror the distinctive markers the MMR "Add to Map" types create, so
+// tenant notices / school reads / special reads etc. are recognisable in the
+// field instead of collapsing into a plain notif-code marker.
+function _placedLockSvg(color) {
+  return `<svg viewBox="0 0 20 20" width="15" height="15" xmlns="http://www.w3.org/2000/svg">
+    <rect x="3" y="9" width="14" height="10" rx="2" fill="${color}"/>
+    <path d="M6.5 9V6a3.5 3.5 0 0 1 7 0v3" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round"/>
+  </svg>`;
+}
+function _placedCheckReadSvg(color) {
+  return `<svg viewBox="0 0 20 20" width="15" height="15" xmlns="http://www.w3.org/2000/svg" fill="none">
+    <rect x="3" y="2" width="14" height="17" rx="1.5" stroke="${color}" stroke-width="1.5"/>
+    <path d="M7 2v-1h6v1" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M6 11.5l3 3 5-5" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+function _placedBatterySvg(color) {
+  return `<svg viewBox="0 0 20 20" width="15" height="15" xmlns="http://www.w3.org/2000/svg" fill="none">
+    <rect x="1" y="5.5" width="14.5" height="9" rx="1.5" stroke="${color}" stroke-width="1.5"/>
+    <path d="M18 8.5v3" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="4" y1="10" x2="9" y2="10" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+  </svg>`;
+}
+function _placedEnvelopeSvg(color) {
+  return `<svg viewBox="0 0 20 20" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
+    <rect x="1.5" y="4.5" width="17" height="12" rx="1.5" fill="none" stroke="${color}" stroke-width="1.6"/>
+    <path d="M1.5 6l8.5 5.5L18.5 6" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+function _placedSchoolSvg(color) {
+  return `<svg viewBox="0 0 20 20" width="16" height="15" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 3 L19 7 L10 11 L1 7 Z" fill="${color}"/>
+    <path d="M4.5 8.7 V12 C4.5 13.3 7 14.5 10 14.5 C13 14.5 15.5 13.3 15.5 12 V8.7" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="18.4" y1="7.3" x2="18.4" y2="11.5" stroke="${color}" stroke-width="1.2" stroke-linecap="round"/>
+    <circle cx="18.4" cy="12" r="1" fill="${color}"/>
+  </svg>`;
+}
+
+// Keyed to MMR's PLACED_TYPES so the icons match exactly.
+const PLACED_TYPES = {
+  tenant_notice: { bg: '#f39c12', ring: '#e67e22', icon: _placedEnvelopeSvg('#fff') },
+  tenant_rdlk:   { bg: '#f39c12', ring: '#e67e22', icon: _placedEnvelopeSvg('#fff'),
+                   overlay: _placedLockSvg('#e74c3c') },
+  school_read:   { bg: '#8e44ad', ring: '#6c3483', icon: _placedSchoolSvg('#fff') },
+  special_rmbe:  { bg: '#f1c40f', ring: '#d4ac0d', icon: _placedBatterySvg('#fff') },
+  special_read:  { bg: '#fff',    ring: '#d4a017', icon: _placedCheckReadSvg('#d4a017'),
+                   doubleRing: true },
+};
+
+function makePlacedNoticeIcon(type) {
+  const cfg = PLACED_TYPES[type];
+  if (!cfg) return null;
+  const ring = cfg.doubleRing
+    ? `<div style="position:absolute;top:-5px;left:-5px;right:-5px;bottom:-5px;border:2px solid ${cfg.ring};border-radius:50%"></div>`
+    : '';
+  const overlay = cfg.overlay
+    ? `<span style="position:absolute;right:-5px;bottom:-5px;width:15px;height:15px;background:#fff;border-radius:3px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 2px rgba(0,0,0,0.6)"><span style="transform:scale(0.7);display:flex">${cfg.overlay}</span></span>`
+    : '';
+  const html = `<div style="position:relative;width:28px;height:28px;background:${cfg.bg};border-radius:50%;border:2px solid ${cfg.ring};display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.5)">${cfg.icon}${overlay}${ring}</div>`;
+  return L.divIcon({ html, className: '', iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -16] });
+}
+
 function makeBaseMarkerIcon(row) {
+  const placed = (row['_placedType'] || '').trim();
+  if (placed) {
+    const icon = makePlacedNoticeIcon(placed);
+    if (icon) return icon;
+  }
   if (isRedLock(row)) {
     const badge = isLockEndPast(row) ? 'exclamation' : isLockEndToday(row) ? 'star' : null;
     return makeLockIcon('#ef4444', '#ef4444', badge);
