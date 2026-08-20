@@ -5,7 +5,7 @@
 'use strict';
 
 // ── Version ───────────────────────────────────
-const APP_VERSION = 'v5.9';
+const APP_VERSION = 'v6.0';
 
 // ── Google Sheets published CSV URL ───────────
 // Dispatcher: File → Share → Publish to web → CSV → paste the URL here
@@ -13,6 +13,7 @@ const SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTmjcAZ6
 
 // GitHub Gist — token is stored in localStorage, entered once via the burger menu
 const GITHUB_GIST_ID = 'aa005d9b6708553fc37317c35900aefb';
+const GITHUB_GIST_OWNER = 'metroutes-blip';
 const GIST_TOKEN_KEY = 'wo_gist_token';
 function getGistToken() { return localStorage.getItem(GIST_TOKEN_KEY) || ''; }
 
@@ -39,7 +40,20 @@ const ENGINEER_PINS = {
   'DAWSONJ2': '7004',
   'DAWSONS': '6276',
   'GRANDMAK': '0760',
+  'BRANDC': '4542',
+  'CHAVEZP1': '5914',
+  'HENDERM2': '8249',
+  'MELVINS': '8990',
 };
+
+// Workers who always appear on the "Who are you?" page, whether or not they
+// currently hold any work. Anyone else shows up only while they have work
+// orders assigned — but they keep their PIN in ENGINEER_PINS above, so they are
+// still challenged when they do appear.
+const ROSTER = [
+  'AGIUSA', 'BORNEMAM', 'BRANDC', 'CHAVEZP1', 'CRUISEM',
+  'DUFFYJ', 'HENDERM2', 'MELVINS', 'NASRJ', 'ROTHD1',
+];
 const PIN_UNLOCK_PREFIX = 'wo_pin_'; // localStorage: wo_pin_<engineer> = 'YYYY-MM-DD'
 
 // ── ID prefixes ───────────────────────────────
@@ -325,24 +339,78 @@ function normalizeUploadedRows(rows, assignDate) {
   })).filter(r => r['Workorder'] && r['Street Address']);
 }
 
+// ── Gist error reporting ───────────────────────
+// The Gists API only accepts a *classic* personal access token carrying the
+// `gist` scope. Fine-grained tokens are silently unsupported and come back as
+// 404, which is indistinguishable from "gist deleted" unless we spell it out.
+function gistErrorMessage(status) {
+  if (status === 401) return 'Sync token rejected — it has expired or is wrong';
+  if (status === 403) return 'Sync token lacks the "gist" scope (or rate limited)';
+  if (status === 404) return 'Token has no gist access — needs a CLASSIC token';
+  if (status === 422) return 'Work order list too large for the cloud sync';
+  if (status >= 500) return `GitHub is having trouble (${status}) — try again`;
+  return `Cloud sync failed (${status})`;
+}
+
 // ── GitHub Gist fetch ──────────────────────────
+// Records the last failure so callers can tell "no data" apart from "the fetch
+// broke", instead of silently falling back and resurrecting deleted rows.
+let lastGistFetchError = null;
+
+// The list is ~430 KB, big enough that GET /gists/:id intermittently 504s while
+// GitHub serialises it. That 504 page carries no CORS headers, so the browser
+// surfaces it as a bare "TypeError: Failed to fetch" with no status to inspect.
+// Reading the raw file sidesteps that entirely: resolve the newest revision SHA
+// (a tiny, reliable call), then fetch SHA-pinned content, which is immutable —
+// so it can never be a stale CDN copy and never gets truncated.
+async function fetchGistViaRaw(headers) {
+  const cRes = await fetch(
+    `https://api.github.com/gists/${GITHUB_GIST_ID}/commits?per_page=1`,
+    { cache: 'no-store', headers });
+  if (!cRes.ok) throw new Error(`commits ${cRes.status}`);
+  const sha = (await cRes.json())?.[0]?.version;
+  if (!sha) throw new Error('no revision found');
+
+  const rRes = await fetch(
+    `https://gist.githubusercontent.com/${GITHUB_GIST_OWNER}/${GITHUB_GIST_ID}/raw/${sha}/workorders.json`);
+  if (!rRes.ok) throw new Error(`raw ${rRes.status}`);
+  return await rRes.json();
+}
+
+// Falls back to the plain API read if the raw route fails, so a change of gist
+// owner or a renamed file degrades instead of breaking outright.
+async function fetchGistViaApi(headers) {
+  const res = await fetch(`https://api.github.com/gists/${GITHUB_GIST_ID}`, {
+    cache: 'no-store',
+    headers,
+  });
+  if (!res.ok) throw new Error(gistErrorMessage(res.status));
+  const data = await res.json();
+  const content = data.files?.['workorders.json']?.content;
+  if (!content) throw new Error('workorders.json missing from the gist');
+  return JSON.parse(content);
+}
+
+function looksLikeWorkOrders(records) {
+  return Array.isArray(records) && records.length &&
+    records[0]['Street Address'] !== undefined;
+}
+
 async function fetchFromGist() {
   const token = getGistToken();
   const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-  try {
-    const res = await fetch(`https://api.github.com/gists/${GITHUB_GIST_ID}`, {
-      cache: 'no-store',
-      headers,
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const content = data.files?.['workorders.json']?.content;
-    if (!content) return null;
-    const records = JSON.parse(content);
-    if (Array.isArray(records) && records.length && records[0]['Street Address'] !== undefined) {
-      return records;
+  lastGistFetchError = null;
+
+  for (const route of [fetchGistViaRaw, fetchGistViaApi]) {
+    try {
+      const records = await route(headers);
+      if (looksLikeWorkOrders(records)) return records;
+      lastGistFetchError = 'Cloud list was empty or malformed';
+    } catch (e) {
+      lastGistFetchError = e.message || 'Could not reach GitHub';
+      console.error(`Gist fetch failed via ${route.name}:`, e);
     }
-  } catch (_) { }
+  }
   return null;
 }
 
@@ -360,16 +428,18 @@ async function updateGist(records) {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
+      // Compact, not pretty-printed — the pretty form is ~25% larger for no
+      // benefit and the list is already near half of the 1 MB gist file limit.
       body: JSON.stringify({
         files: {
-          'workorders.json': { content: JSON.stringify(records, null, 2) },
+          'workorders.json': { content: JSON.stringify(records) },
         },
       }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error('Gist update failed:', res.status, err);
-      showToast('Failed to sync to cloud', true);
+      showToast(gistErrorMessage(res.status), true);
       return false;
     }
     return true;
@@ -377,6 +447,63 @@ async function updateGist(records) {
     console.error('Gist update error:', e);
     showToast('Network error — could not sync to cloud', true);
     return false;
+  }
+}
+
+// ── Row identity ───────────────────────────────
+// The same Workorder can be assigned on more than one date, so anything that
+// removes "this row" needs the date too — matching on the id alone would take
+// the other date's copy with it.
+function woId(row) { return (row['Workorder'] || '').trim(); }
+function rowKey(row) { return `${woId(row)}|${(row['_assignDate'] || '').trim()}`; }
+
+// ── Cloud delta write ──────────────────────────
+// Applies a delta to the CLOUD list instead of overwriting it with this
+// device's snapshot. `updateGist(workOrders)` erased anything another engineer
+// had added since this device last fetched — and after selectEngineer() the
+// restored list holds only one engineer's rows, so a single delete could wipe
+// everyone else's work. Mirrors the merge btnUploadConfirm already does.
+async function pushCloudDelta({ removeIds = [], removeKeys = [], upsertRows = [] } = {}) {
+  // Checked up front so the caller reports the real reason — otherwise
+  // updateGist's own "no token" toast is immediately overwritten by ours.
+  if (!getGistToken()) {
+    return { ok: false, reason: 'No sync token set' };
+  }
+
+  const cloud = await fetchFromGist();
+
+  // A failed read must never be treated as an empty cloud list.
+  if (cloud === null && lastGistFetchError) {
+    return { ok: false, reason: lastGistFetchError };
+  }
+
+  const dropIds = new Set(removeIds);
+  const dropKeys = new Set(removeKeys);
+  upsertRows.forEach(r => dropIds.add(woId(r)));
+
+  const merged = (cloud || [])
+    .filter(r => !dropIds.has(woId(r)) && !dropKeys.has(rowKey(r)))
+    .concat(upsertRows);
+
+  const ok = await updateGist(merged);
+  return ok ? { ok: true, merged } : { ok: false, reason: 'Cloud write failed' };
+}
+
+// ── Record persistence ─────────────────────────
+// Swallowing a quota failure silently leaves this device holding an older,
+// smaller list than the cloud, which is exactly what made the old blind
+// overwrites destructive. Warn once instead of failing invisibly.
+let recordsSaveWarned = false;
+function saveRecords(records) {
+  try {
+    localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+    recordsSaveWarned = false;
+  } catch (e) {
+    console.error('Could not persist records:', e);
+    if (!recordsSaveWarned) {
+      recordsSaveWarned = true;
+      showToast('Device storage is full — this list may not survive a restart', true);
+    }
   }
 }
 
@@ -1334,7 +1461,7 @@ function applyNewCSV(records, keepPrev) {
   selectedEngineer = '';
   clearMapMarkers();
 
-  try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
+  saveRecords(workOrders);
   try { localStorage.removeItem(ENGINEER_KEY); } catch (_) { }
   try { localStorage.removeItem(POINTS_KEY); } catch (_) { }
 
@@ -1342,15 +1469,25 @@ function applyNewCSV(records, keepPrev) {
 }
 
 // ── Engineer picker ───────────────────────────
+// The roster always shows, whether or not those workers currently have work.
+// Deriving this list purely from the loaded work orders locked people out once
+// they cleared their route — and Upload CSV lives in the burger menu on the map,
+// so they could never get far enough in to add any. Names present in the data
+// are unioned in so anyone holding work can always reach it.
+function engineerNames() {
+  return [...new Set([
+    ...ROSTER,
+    ...workOrders.map(r => (r['engineer'] || '').trim()).filter(Boolean),
+  ])].sort();
+}
+
 function showEngineerView() {
   viewHome.classList.add('hidden');
   viewMap.classList.add('hidden');
   viewPin.classList.add('hidden');
   viewEngineer.classList.remove('hidden');
 
-  const names = [...new Set(
-    workOrders.map(r => (r['engineer'] || '').trim()).filter(Boolean)
-  )].sort();
+  const names = engineerNames();
 
   engineerList.innerHTML = '';
   names.forEach(name => {
@@ -1392,7 +1529,7 @@ function selectEngineer(name) {
   // Narrow the saved records down to just this engineer's rows so the
   // localStorage payload stays small regardless of how large the full CSV is.
   const myJobs = workOrders.filter(r => (r['engineer'] || '').trim() === name);
-  try { localStorage.setItem(RECORDS_KEY, JSON.stringify(myJobs)); } catch (_) { }
+  saveRecords(myJobs);
 
   viewEngineer.classList.add('hidden');
 
@@ -1435,12 +1572,21 @@ function tryRestoreSession() {
 async function reloadFromSheets() {
   if (btnRefresh) btnRefresh.classList.add('is-loading');
 
-  // Try JSONBin first (MMR Setup exports land here)
+  // The cloud gist is the authority — it is the only copy that reflects
+  // deletions. Google Sheets is the original import and still lists everything.
   const gistRecords = await fetchFromGist();
   if (gistRecords && gistRecords.length) {
     if (btnRefresh) btnRefresh.classList.remove('is-loading');
     showToast('Work orders reloaded');
     applyNewCSV(gistRecords, false);
+    return;
+  }
+
+  // If the cloud read *failed*, stop. Falling through to Sheets here would
+  // silently resurrect every work order that has been deleted.
+  if (lastGistFetchError) {
+    if (btnRefresh) btnRefresh.classList.remove('is-loading');
+    showToast(`${lastGistFetchError} — keeping current list`, true);
     return;
   }
 
@@ -1514,8 +1660,16 @@ btnUploadConfirm.addEventListener('click', async () => {
   // Merge with the cloud list so other engineers' work orders are kept —
   // uploaded rows replace any existing record with the same Workorder.
   const uploadedIds = new Set(uploaded.map(r => r['Workorder']));
-  const existing = (await fetchFromGist()) || [];
-  const merged = existing
+  const existing = await fetchFromGist();
+
+  // Treating a failed read as an empty cloud list would push only these
+  // uploaded rows back up, deleting every other engineer's work orders.
+  if (existing === null && lastGistFetchError) {
+    showToast(`${lastGistFetchError} — upload cancelled`, true);
+    return;
+  }
+
+  const merged = (existing || [])
     .filter(r => !uploadedIds.has((r['Workorder'] || '').trim()))
     .concat(uploaded);
 
@@ -1596,7 +1750,7 @@ btnAddAddrSubmit.addEventListener('click', async () => {
       geocodedPoints.push({ lat: coords.lat, lng: coords.lng, row });
       workOrders.push(row);
       savePoints();
-      try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
+      saveRecords(workOrders);
       addSingleMarker(coords, row);
       updateBadge();
       updateStatusBar();
@@ -1604,7 +1758,7 @@ btnAddAddrSubmit.addEventListener('click', async () => {
       addAddressModal.classList.add('hidden');
       // Sync to Gist
       btnAddAddrSubmit.textContent = 'Syncing…';
-      const ok = await updateGist(workOrders);
+      const ok = (await pushCloudDelta({ upsertRows: [row] })).ok;
       showToast(ok ? 'Address added & synced to cloud' : 'Address added locally (sync failed)');
     } else {
       addAddressStatus.textContent = 'Address not found — try a more specific query';
@@ -2038,10 +2192,15 @@ btnDeleteByDate.addEventListener('click', () => {
   deleteByDateModal.classList.remove('hidden');
 });
 
+// A blank engineer used to match every engineer's rows, and custom addresses
+// were included regardless of owner. The modal's count must be exactly what
+// gets deleted, so neither widening is allowed. Custom addresses are removed
+// individually via Delete Work Order.
 function myWorkOrdersOnDate(date) {
+  if (!selectedEngineer) return [];
   return workOrders.filter(r =>
     (r['_assignDate'] || '').trim() === date &&
-    (!selectedEngineer || r['_isCustom'] || (r['engineer'] || '').trim() === selectedEngineer)
+    (r['engineer'] || '').trim() === selectedEngineer
   );
 }
 
@@ -2063,22 +2222,34 @@ btnDeleteByDateConfirm.addEventListener('click', async () => {
   const date = deleteByDateInput.value;
   if (!date) return;
 
-  const toDelete = new Set(
-    myWorkOrdersOnDate(date)
-      .map(r => (r['Workorder'] || '').trim())
-      .filter(Boolean)
-  );
-  const n = toDelete.size;
+  const matched = myWorkOrdersOnDate(date);
+  const n = matched.length;
   if (!n) return;
 
-  geocodedPoints = geocodedPoints.filter(p => !toDelete.has((p.row['Workorder'] || '').trim()));
-  workOrders = workOrders.filter(r => !toDelete.has((r['Workorder'] || '').trim()));
-  toDelete.forEach(wo => delete completions[wo]);
+  const matchedKeys = new Set(matched.map(rowKey));
+  const completionIds = matched.map(woId).filter(Boolean);
+
+  // Sync before touching local state: a deletion that lands here but not in the
+  // cloud simply comes back on the next refresh.
+  btnDeleteByDateConfirm.disabled = true;
+  btnDeleteByDateConfirm.textContent = 'Deleting…';
+  const res = await pushCloudDelta({ removeKeys: [...matchedKeys] });
+  btnDeleteByDateConfirm.disabled = false;
+  btnDeleteByDateConfirm.textContent = 'Delete';
+
+  if (!res.ok) {
+    showToast(`${res.reason} — nothing deleted`, true);
+    return;
+  }
+
+  geocodedPoints = geocodedPoints.filter(p => !matchedKeys.has(rowKey(p.row)));
+  workOrders = workOrders.filter(r => !matchedKeys.has(rowKey(r)));
+  completionIds.forEach(wo => delete completions[wo]);
   saveCompletions();
   savePoints();
-  try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
+  saveRecords(workOrders);
 
-  if (activeRow && toDelete.has((activeRow['Workorder'] || '').trim())) closeDetailSheet();
+  if (activeRow && matchedKeys.has(rowKey(activeRow))) closeDetailSheet();
 
   placeMarkers(getFilteredPoints(), false);
   updateBadge();
@@ -2086,22 +2257,33 @@ btnDeleteByDateConfirm.addEventListener('click', async () => {
   updateCompletedCountBadge();
   deleteByDateModal.classList.add('hidden');
 
-  const ok = await updateGist(workOrders);
-  showToast(ok ? `${n} work order${n !== 1 ? 's' : ''} deleted & synced` : `${n} work order${n !== 1 ? 's' : ''} deleted locally (sync failed)`);
+  showToast(`${n} work order${n !== 1 ? 's' : ''} deleted & synced`);
 });
 
 btnDeleteConfirm.addEventListener('click', async () => {
   const completedIds = new Set(Object.keys(completions));
   const n = completedIds.size;
+  if (!n) return;
 
-  geocodedPoints = geocodedPoints.filter(p => !completedIds.has((p.row['Workorder'] || '').trim()));
-  workOrders = workOrders.filter(r => !completedIds.has((r['Workorder'] || '').trim()));
+  btnDeleteConfirm.disabled = true;
+  btnDeleteConfirm.textContent = 'Deleting…';
+  const res = await pushCloudDelta({ removeIds: [...completedIds] });
+  btnDeleteConfirm.disabled = false;
+  btnDeleteConfirm.textContent = 'Delete';
+
+  if (!res.ok) {
+    showToast(`${res.reason} — nothing deleted`, true);
+    return;
+  }
+
+  geocodedPoints = geocodedPoints.filter(p => !completedIds.has(woId(p.row)));
+  workOrders = workOrders.filter(r => !completedIds.has(woId(r)));
   completions = {};
   saveCompletions();
-  try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
+  saveRecords(workOrders);
   savePoints();
 
-  if (activeRow && completedIds.has((activeRow['Workorder'] || '').trim())) {
+  if (activeRow && completedIds.has(woId(activeRow))) {
     closeDetailSheet();
   }
 
@@ -2111,8 +2293,7 @@ btnDeleteConfirm.addEventListener('click', async () => {
   updateCompletedCountBadge();
   deleteConfirmModal.classList.add('hidden');
 
-  const ok = await updateGist(workOrders);
-  showToast(ok ? `${n} work order${n !== 1 ? 's' : ''} deleted & synced` : `${n} work order${n !== 1 ? 's' : ''} deleted locally (sync failed)`);
+  showToast(`${n} work order${n !== 1 ? 's' : ''} deleted & synced`);
 });
 
 function onNavClick(e) {
@@ -2159,18 +2340,24 @@ btnComplete.addEventListener('click', () => {
 // ── Universal delete work order (covers regular WOs, TN- notices, and custom addresses) ──
 btnDeleteWO.addEventListener('click', async () => {
   if (!activeRow) return;
-  const wo = (activeRow['Workorder'] || '').trim();
+  const wo = woId(activeRow);
   const addr = (activeRow['Street Address'] || '').trim();
   const label = activeRow._isCustom ? 'address' : 'work order';
 
   if (!confirm(`Delete this ${label} (${addr || wo})? This will sync to all users.`)) return;
 
-  geocodedPoints = geocodedPoints.filter(p => (p.row['Workorder'] || '').trim() !== wo);
-  workOrders = workOrders.filter(r => (r['Workorder'] || '').trim() !== wo);
+  const res = await pushCloudDelta({ removeIds: [wo] });
+  if (!res.ok) {
+    showToast(`${res.reason} — nothing deleted`, true);
+    return;
+  }
+
+  geocodedPoints = geocodedPoints.filter(p => woId(p.row) !== wo);
+  workOrders = workOrders.filter(r => woId(r) !== wo);
   delete completions[wo];
   saveCompletions();
   savePoints();
-  try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
+  saveRecords(workOrders);
 
   closeDetailSheet();
   placeMarkers(getFilteredPoints(), false);
@@ -2178,8 +2365,7 @@ btnDeleteWO.addEventListener('click', async () => {
   updateStatusBar();
   updateCompletedCountBadge();
 
-  const ok = await updateGist(workOrders);
-  showToast(ok ? `Deleted & synced to cloud` : `Deleted locally (sync failed)`);
+  showToast('Deleted & synced to cloud');
 });
 
 // ── New Work Order ─────────────────────────────────────────────────────────
@@ -2217,20 +2403,107 @@ function updateTokenStatusLabel() {
   tokenStatusLabel.style.color = getGistToken() ? '#22c55e' : '#f97316';
 }
 
+const btnSetTokenTest = document.getElementById('btn-set-token-test');
+const tokenCheckResult = document.getElementById('token-check-result');
+
+function showTokenCheck(msg, ok) {
+  tokenCheckResult.textContent = msg;
+  tokenCheckResult.style.color = ok ? '#22c55e' : '#f97316';
+  tokenCheckResult.classList.remove('hidden');
+}
+
+// Checks a token end to end: is it valid, is it the right *kind* of token, does
+// it carry the gist scope, and can it actually reach our gist. GitHub exposes
+// x-oauth-scopes only for classic tokens — a missing header is how we detect a
+// fine-grained token, which the Gists API does not support at all.
+async function validateGistToken(token) {
+  let res;
+  try {
+    res = await fetch('https://api.github.com/user', {
+      cache: 'no-store',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+  } catch (_) {
+    return { ok: false, msg: 'Could not reach GitHub — check your connection' };
+  }
+
+  if (res.status === 401) {
+    return { ok: false, msg: 'Rejected — token is wrong, revoked, or expired' };
+  }
+  if (!res.ok) {
+    return { ok: false, msg: gistErrorMessage(res.status) };
+  }
+
+  const scopes = res.headers.get('x-oauth-scopes');
+  if (scopes === null) {
+    return {
+      ok: false,
+      msg: 'This is a fine-grained token. Gists need a CLASSIC token — ' +
+        'GitHub → Settings → Developer settings → Tokens (classic), tick "gist".',
+    };
+  }
+  if (!scopes.split(',').map(x => x.trim()).includes('gist')) {
+    return {
+      ok: false,
+      msg: 'Classic token, but the "gist" scope is not ticked. ' +
+        `Scopes found: ${scopes || 'none'}.`,
+    };
+  }
+
+  let gistRes;
+  try {
+    gistRes = await fetch(`https://api.github.com/gists/${GITHUB_GIST_ID}`, {
+      cache: 'no-store',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+  } catch (_) {
+    return { ok: false, msg: 'Could not reach the gist — check your connection' };
+  }
+  if (!gistRes.ok) {
+    return { ok: false, msg: `Token is valid but the gist is unreachable (${gistRes.status})` };
+  }
+
+  const login = (await res.json().catch(() => ({}))).login || 'unknown';
+  return { ok: true, msg: `Working — signed in as ${login}, gist reachable.` };
+}
+
 btnSetToken.addEventListener('click', () => {
   closeBurgerMenu();
   setTokenInput.value = getGistToken();
+  tokenCheckResult.classList.add('hidden');
   setTokenModal.classList.remove('hidden');
   setTimeout(() => setTokenInput.focus(), 80);
 });
 
-btnSetTokenSave.addEventListener('click', () => {
+btnSetTokenTest.addEventListener('click', async () => {
+  const val = setTokenInput.value.trim();
+  if (!val) { showTokenCheck('Enter a token first.', false); return; }
+  btnSetTokenTest.disabled = true;
+  btnSetTokenTest.textContent = 'Testing…';
+  const result = await validateGistToken(val);
+  btnSetTokenTest.disabled = false;
+  btnSetTokenTest.textContent = 'Test Token';
+  showTokenCheck(result.msg, result.ok);
+});
+
+btnSetTokenSave.addEventListener('click', async () => {
   const val = setTokenInput.value.trim();
   if (!val) { showToast('Token cannot be empty', true); return; }
+
+  btnSetTokenSave.disabled = true;
+  btnSetTokenSave.textContent = 'Checking…';
+  const result = await validateGistToken(val);
+  btnSetTokenSave.disabled = false;
+  btnSetTokenSave.textContent = 'Save';
+
+  // A token that cannot write is worse than none — it fails silently at delete
+  // time. Save it only if it checks out, and say why when it does not.
+  if (!result.ok) { showTokenCheck(result.msg, false); return; }
+
   localStorage.setItem(GIST_TOKEN_KEY, val);
   updateTokenStatusLabel();
   setTokenModal.classList.add('hidden');
-  showToast('Sync token saved');
+  showToast('Sync token saved & verified');
 });
 
 btnSetTokenClear.addEventListener('click', () => {
@@ -2279,10 +2552,10 @@ btnNewWoSubmit.addEventListener('click', async () => {
 
     const lat = parseFloat(data[0].lat);
     const lng = parseFloat(data[0].lon);
-    const woId = nwoWorkorder.value.trim() || (NEW_WO_ID_PREFIX + Date.now());
+    const newWoId = nwoWorkorder.value.trim() || (NEW_WO_ID_PREFIX + Date.now());
 
     const row = {
-      'Workorder': woId,
+      'Workorder': newWoId,
       'Street Address': addr,
       'City': city,
       'Notification Type': nwoNotifType.value,
@@ -2305,7 +2578,7 @@ btnNewWoSubmit.addEventListener('click', async () => {
     workOrders.push(row);
     geocodedPoints.push({ lat, lng, row });
     savePoints();
-    try { localStorage.setItem(RECORDS_KEY, JSON.stringify(workOrders)); } catch (_) { }
+    saveRecords(workOrders);
 
     addSingleMarker({ lat, lng }, row);
     updateBadge();
@@ -2315,8 +2588,8 @@ btnNewWoSubmit.addEventListener('click', async () => {
     newWoModal.classList.add('hidden');
 
     btnNewWoSubmit.textContent = 'Syncing…';
-    const ok = await updateGist(workOrders);
-    showToast(ok ? `Work order ${woId} created & synced` : `Work order ${woId} created locally (sync failed)`);
+    const ok = (await pushCloudDelta({ upsertRows: [row] })).ok;
+    showToast(ok ? `Work order ${newWoId} created & synced` : `Work order ${newWoId} created locally (sync failed)`);
   } catch (_) {
     newWoStatus.textContent = 'Network error — try again.';
     newWoStatus.style.color = '#dc2626';
@@ -2387,13 +2660,40 @@ function restoreSession(savedEngineer) {
   }, 150);
 }
 
+// Last resort when no fresh list could be loaded: bring back whatever this
+// device already had, which is the copy that reflects local deletions.
+function restoreOrPrompt() {
+  const savedEngineer = localStorage.getItem(ENGINEER_KEY) || '';
+  const hasSession = tryRestoreSession();
+
+  if (hasSession && savedEngineer) {
+    if (!isPinUnlocked(savedEngineer)) {
+      showPinView(savedEngineer, () => restoreSession(savedEngineer));
+      return;
+    }
+    restoreSession(savedEngineer);
+  } else if (hasSession) {
+    // Records loaded but no engineer saved — show picker
+    showEngineerView();
+  } else {
+    showHomeView();
+  }
+}
+
 function bootContinue() {
-  // Try npoint.io first (MMR Setup exports land here)
+  // The cloud gist is the authority — see reloadFromSheets().
   fetchFromGist().then(gistRecords => {
     if (gistRecords && gistRecords.length) {
       showToast('Work orders loaded');
       applyNewCSV(gistRecords, false);
       return;
+    }
+
+    // Cloud unreachable: fall through to the saved session below rather than to
+    // Sheets, so deleted work orders do not reappear on this device.
+    if (lastGistFetchError) {
+      showToast(`${lastGistFetchError} — using saved list`, true);
+      return Promise.resolve(null).then(() => restoreOrPrompt());
     }
 
     // Fall back to Google Sheets
@@ -2408,21 +2708,7 @@ function bootContinue() {
       }
 
       // Sheets not configured or fetch failed — fall back to session restore
-      const savedEngineer = localStorage.getItem(ENGINEER_KEY) || '';
-      const hasSession = tryRestoreSession();
-
-      if (hasSession && savedEngineer) {
-        if (!isPinUnlocked(savedEngineer)) {
-          showPinView(savedEngineer, () => restoreSession(savedEngineer));
-          return;
-        }
-        restoreSession(savedEngineer);
-      } else if (hasSession) {
-        // CSV loaded but no engineer saved — show picker
-        showEngineerView();
-      } else {
-        showHomeView();
-      }
+      restoreOrPrompt();
     });
   });
 }

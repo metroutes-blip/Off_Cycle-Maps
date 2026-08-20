@@ -517,11 +517,13 @@
   <div id="set-token-modal" class="modal-overlay hidden">
     <div class="modal-sheet">
       <h2 class="modal-title">Set Sync Token</h2>
-      <p class="modal-desc">Enter the GitHub personal access token for the metroutes-blip account. This is stored only on this device.</p>
+      <p class="modal-desc">Enter the GitHub personal access token for the metroutes-blip account. This is stored only on this device.<br><strong>Must be a classic token (ghp_…) with the &ldquo;gist&rdquo; scope</strong> &mdash; fine-grained tokens cannot write gists.</p>
       <input id="set-token-input" type="password" class="add-address-input"
              placeholder="ghp_..." autocomplete="off" />
+      <p id="token-check-result" class="token-check-result hidden"></p>
       <div class="modal-actions">
         <button id="btn-set-token-save" class="modal-action-primary">Save</button>
+        <button id="btn-set-token-test" class="modal-action-secondary">Test Token</button>
         <button id="btn-set-token-clear" class="modal-action-secondary">Clear Token</button>
         <button id="btn-set-token-cancel" class="modal-action-secondary">Cancel</button>
       </div>
